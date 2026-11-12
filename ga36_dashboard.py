@@ -913,19 +913,46 @@ def mode_image(client, image_path):
         print(f"\n[HATA] Resim işleme hatası: {e}")
 
 
-def mode_dashboard(client, theme="pie"):
-    current_theme = theme.lower() if theme in ("pie", "dual", "btop") else "pie"
+THEME_FILE = os.path.expanduser("~/.config/ga36/theme")
+
+def get_saved_theme():
+    try:
+        if os.path.exists(THEME_FILE):
+            with open(THEME_FILE, "r") as f:
+                t = f.read().strip().lower()
+                if t in ("pie", "dual", "btop"):
+                    return t
+    except Exception:
+        pass
+    return "pie"
+
+def save_active_theme(theme_name):
+    try:
+        os.makedirs(os.path.dirname(THEME_FILE), exist_ok=True)
+        with open(THEME_FILE, "w") as f:
+            f.write(theme_name.strip().lower() + "\n")
+    except Exception:
+        pass
+
+
+def mode_dashboard(client, theme=None):
+    if theme and theme.lower() in ("pie", "dual", "btop"):
+        current_theme = theme.lower()
+        save_active_theme(current_theme)
+    else:
+        current_theme = get_saved_theme()
 
     print("\n" + "=" * 60)
-    print(" R36S CYBER PIE / CANLI DONANIM HUD AKTİF!")
-    print(f" Aktif Tema: {current_theme.upper()} (Dairesel Pasta Göstergeler)")
+    print(" GA36 / R36S CYBER CANLI DONANIM HUD AKTİF!")
+    print(f" Aktif Tema: {current_theme.upper()}")
     print(" R36S ekranında gerçek zamanlı veriler akmaktadır.")
     print(" Fiziksel Gamepad Tuşları:")
-    print("   [ A ]      -> Medya Oynat / Duraklat")
-    print("   [ B ]      -> Sonraki Şarkı")
-    print("   [ X ]      -> Mikrofonu Sustur / Aç")
-    print("   [ Y ]      -> Ekran Görüntüsü Al")
-    print("   [ SELECT ] -> Temayı Değiştir (PIE ➔ DUAL ➔ BTOP)")
+    print("   [ A ]           -> Medya Oynat / Duraklat")
+    print("   [ B ]           -> Sonraki Şarkı")
+    print("   [ X ]           -> Mikrofonu Sustur / Aç")
+    print("   [ Y ]           -> Ekran Görüntüsü Al")
+    print("   [ SELECT/MODE ] -> Temayı Değiştir (PIE ➔ DUAL ➔ BTOP)")
+    print("   [ DPAD SOL/SAĞ ]-> Temalar Arasında Gezin")
     print(" Çıkmak için terminalde Ctrl+C tuşlarına basın.")
     print("=" * 60 + "\n")
 
@@ -934,11 +961,17 @@ def mode_dashboard(client, theme="pie"):
 
     def handle_btn(btn_name):
         nonlocal current_theme
-        if btn_name in ("SELECT", "KEY_314"):
+        btn_upper = str(btn_name).upper()
+        # Mode switching buttons: SELECT, MODE, MENU, START, DPAD, L1, R1
+        if btn_upper in ("SELECT", "MODE", "MENU", "START", "KEY_314", "KEY_315", "KEY_316", "KEY_139", "KEY_296", "KEY_297", "L1", "R1", "KEY_310", "KEY_311", "DPAD_RIGHT", "DPAD_LEFT", "KEY_105", "KEY_106"):
             themes = ["pie", "dual", "btop"]
-            idx = (themes.index(current_theme) + 1) % len(themes)
+            if btn_upper in ("DPAD_LEFT", "L1", "KEY_310", "KEY_105"):
+                idx = (themes.index(current_theme) - 1) % len(themes)
+            else:
+                idx = (themes.index(current_theme) + 1) % len(themes)
             current_theme = themes[idx]
-            print(f"\n[TEMA DEĞİŞTİ] Yeni HUD Teması: {current_theme.upper()}    ")
+            save_active_theme(current_theme)
+            print(f"\n[TEMA DEĞİŞTİ] Yeni HUD Modu: {current_theme.upper()}    ")
         else:
             client.default_button_action(btn_name)
 
@@ -972,6 +1005,12 @@ def mode_dashboard(client, theme="pie"):
             if t0 - last_power_time > 5.0:
                 power_info = client.get_power()
                 last_power_time = t0
+
+            # Check if theme was updated externally (via CLI / file)
+            saved_theme = get_saved_theme()
+            if saved_theme != current_theme:
+                current_theme = saved_theme
+                print(f"\n[TEMA GÜNCELLENDİ] Yeni HUD Modu: {current_theme.upper()}    ")
 
             # Gather host metrics
             cpu = get_cpu_info()
@@ -1099,20 +1138,40 @@ def mode_poweroff(client):
 # Main Entry Point
 # -------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="R36S Live Sync & Control Suite v3.0")
+    parser = argparse.ArgumentParser(description="GA36 / R36S Live Sync & Control Suite v3.2")
     parser.add_argument("command", nargs="?", default="test",
-                        choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
+                        choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "mode", "theme", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
                         help="Çalıştırma modu")
     parser.add_argument("args", nargs="*", help="Komut parametreleri")
     parser.add_argument("--port", "-p", default=None, help="Seri port (örn: /dev/ttyACM0)")
 
     parsed = parser.parse_args()
 
+    cmd = parsed.command
+
+    # Instant Mode/Theme Switcher (does not require locking serial port)
+    if cmd in ("mode", "theme"):
+        themes = ["pie", "dual", "btop"]
+        cur = get_saved_theme()
+        if parsed.args:
+            target = parsed.args[0].lower().strip()
+            if target not in themes:
+                print(f"[HATA] Geçersiz tema: '{target}'. Seçenekler: {', '.join(themes)}")
+                sys.exit(1)
+        else:
+            idx = (themes.index(cur) + 1) % len(themes)
+            target = themes[idx]
+        save_active_theme(target)
+        print("\n" + "=" * 60)
+        print(f" [BAŞARILI] HUD Modu Güncellendi: {target.upper()} (Önceki: {cur.upper()})")
+        print(" Ekrandaki gösterge anında yeni temaya geçecektir.")
+        print("=" * 60 + "\n")
+        sys.exit(0)
+
     print("=" * 60)
-    print(" R36S PC Companion & Live Control Suite v3.0")
+    print(" GA36 / R36S PC Companion & Live Control Suite v3.2")
     print("=" * 60)
 
-    cmd = parsed.command
     client = R36SClient(port=parsed.port)
     conn_timeout = None if cmd in ("dashboard", "stream") else 30
     if not client.connect(timeout=conn_timeout):

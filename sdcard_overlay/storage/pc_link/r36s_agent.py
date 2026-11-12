@@ -169,12 +169,10 @@ class R36SAgent:
         line = json.dumps(msg_dict, ensure_ascii=False) + "\n"
         raw = line.encode("utf-8")
         with self.lock:
-            if self.ser_file and not self.ser_file.closed:
+            if self.ser_file and not getattr(self.ser_file, "closed", True):
                 try:
-                    _, w, _ = select.select([], [self.ser_file], [], 0.5)
-                    if w:
-                        self.ser_file.write(raw)
-                        self.ser_file.flush()
+                    self.ser_file.write(raw)
+                    self.ser_file.flush()
                 except Exception:
                     pass
             for sock in list(self.active_connections):
@@ -551,6 +549,7 @@ class R36SAgent:
     def run_gamepad_listener(self):
         """Monitors all /dev/input/event* devices simultaneously for button presses."""
         BUTTON_MAP = {
+            # Standard Gamepad
             304: "A",
             305: "B",
             307: "X",
@@ -561,9 +560,39 @@ class R36SAgent:
             313: "R2",
             314: "SELECT",
             315: "START",
+            316: "MODE",
+            317: "L3",
+            318: "R3",
+            # D-pad keys
+            16: "DPAD_DOWN",
             17: "DPAD_UP",
-            16: "DPAD_DOWN"
+            105: "DPAD_LEFT",
+            106: "DPAD_RIGHT",
+            # Keyboard / system buttons
+            28: "ENTER",
+            102: "HOME",
+            114: "VOL_DOWN",
+            115: "VOL_UP",
+            116: "POWER",
+            139: "MENU",
+            464: "UDT_KEY",
+            # Generic Joystick buttons
+            0: "BTN_0",
+            1: "BTN_1",
+            2: "BTN_2",
+            3: "BTN_3",
+            8: "SELECT",
+            9: "START",
+            288: "BTN_0",
+            289: "BTN_1",
+            290: "BTN_2",
+            291: "BTN_3",
+            296: "SELECT",
+            297: "START"
         }
+        last_abs_x = 0
+        last_abs_y = 0
+
         while self.running:
             dev_nodes = glob.glob("/dev/input/event*")
             if not dev_nodes:
@@ -591,9 +620,29 @@ class R36SAgent:
                                     if len(chunk) < 16:
                                         break
                                     _, _, ev_type, code, val = struct.unpack("IIHHi", chunk)
-                                    if ev_type == 1 and val == 1:
+                                    if ev_type == 1 and val in (1, 2):
                                         btn_name = BUTTON_MAP.get(code, f"KEY_{code}")
                                         self.broadcast_message({"type": "button", "name": btn_name, "code": code})
+                                    elif ev_type == 3:
+                                        # Analog / Hat D-pad axes
+                                        if code in (0, 16):
+                                            if val < -1000 and last_abs_x >= 0:
+                                                last_abs_x = -1
+                                                self.broadcast_message({"type": "button", "name": "DPAD_LEFT", "code": 105})
+                                            elif val > 1000 and last_abs_x <= 0:
+                                                last_abs_x = 1
+                                                self.broadcast_message({"type": "button", "name": "DPAD_RIGHT", "code": 106})
+                                            elif abs(val) <= 1000:
+                                                last_abs_x = 0
+                                        elif code in (1, 17):
+                                            if val < -1000 and last_abs_y >= 0:
+                                                last_abs_y = -1
+                                                self.broadcast_message({"type": "button", "name": "DPAD_UP", "code": 17})
+                                            elif val > 1000 and last_abs_y <= 0:
+                                                last_abs_y = 1
+                                                self.broadcast_message({"type": "button", "name": "DPAD_DOWN", "code": 16})
+                                            elif abs(val) <= 1000:
+                                                last_abs_y = 0
                         except Exception:
                             pass
             except Exception:

@@ -219,6 +219,10 @@ cmd_shell() {
     systemctl --user start "$SERVICE_NAME" 2>/dev/null || true
 }
 
+cmd_mode() {
+    python3 "$PYTHON_SCRIPT" mode "$@"
+}
+
 cmd_restore() {
     systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
     python3 "$PYTHON_SCRIPT" restore
@@ -282,6 +286,9 @@ case "$ACTION" in
     restore)
         cmd_restore
         ;;
+    mode|theme)
+        cmd_mode "$@"
+        ;;
     backup)
         sudo "${REPO_DIR}/scripts/backup_image.sh" "$@"
         ;;
@@ -300,6 +307,7 @@ case "$ACTION" in
         echo "  status         -> Durum ve USB bağlantısını kontrol et"
         echo "  logs           -> Canlı sistem loglarını incele"
         echo "  dashboard      -> Canlı terminal göstergesini aç"
+        echo "  mode [tema]    -> HUD temasını değiştir (pie, dual, btop veya sıradaki)"
         echo "  image <dosya>  -> Konsola resim / duvar kağıdı gönder"
         echo "  battery        -> Şarj ve güç detaylarını göster"
         echo "  shell          -> Konsola tam yetkili root terminali aç"

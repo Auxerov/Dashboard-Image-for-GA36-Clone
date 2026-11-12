@@ -26,7 +26,8 @@
   - `[ B ]`: Sonraki Şarkı
   - `[ X ]`: PC Mikrofonunu Sustur / Aç (Mute)
   - `[ Y ]`: Ekran Görüntüsü Al (PC Screenshot)
-  - `[ SELECT ]`: HUD Temalarını Döndür (`PIE` ➔ `DUAL` ➔ `BTOP`)
+  - `[ SELECT / MODE / START ]`: HUD Temalarını Döndür (`PIE` ➔ `DUAL` ➔ `BTOP`)
+  - `[ DPAD SOL / SAĞ ]` veya `[ L1 / R1 ]`: Temalar arasında anında geçiş yap
 - **Akıllı Güç & Eko-Mod (~2.5 FPS):** Konsol işlemcisi <%1.5 yük altında çalışır, ısınmaz ve bilgisayarın USB portundan sürekli şarj olur.
 - **PC ile Senkronize Çalışma:** Bilgisayar açıldığında konsol otomatik uyanır ve paneli gösterir; bilgisayar kapandığında konsol da otomatik olarak kapanır.
 - **%100 Geri Döndürülebilir:** Tek bir komutla (`./install.sh restore`) dilediğiniz zaman konsolu fabrika ayarlarına ve oyun menüsüne geri döndürebilirsiniz.
@@ -51,6 +52,7 @@ Script hem kurulum hem de tüm yönetim işlemlerini tek noktadan yürütür:
 | :--- | :--- |
 | `./install.sh` | Bağımlılıkları kurar, udev kuralını ekler ve servisi başlatır |
 | `./install.sh status` | Servis durumunu ve USB bağlantısını kontrol eder |
+| `./install.sh mode [pie\|dual\|btop]` | HUD modunu/temasını anında değiştirir (servisi durdurmadan canlı günceller) |
 | `./install.sh dashboard` | Canlı terminal ekranı ve tema değiştiriciyi açar |
 | `./install.sh stop` | Ekran akışını duraklatır |
 | `./install.sh start` | Ekran akışını yeniden başlatır |
