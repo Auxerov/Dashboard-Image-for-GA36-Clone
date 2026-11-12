@@ -38,62 +38,64 @@ check_root_for_packages() {
 }
 
 install_dependencies() {
-    echo -e "${GREEN}[1/4] Bağımlılıklar denetleniyor (Python3, Serial, Pillow, psutil)...${NC}"
+    echo -e "${GREEN}[1/4] Checking dependencies (Python3, Serial, Pillow, psutil)...${NC}"
     check_root_for_packages
 
     if command -v apt-get >/dev/null 2>&1; then
-        echo -e "${CYAN}APT paket yöneticisi tespit edildi (Debian/Ubuntu/Mint)...${NC}"
+        echo -e "${CYAN}APT package manager detected (Debian/Ubuntu/Mint)...${NC}"
         $SUDO_CMD apt-get update -qq || true
         $SUDO_CMD apt-get install -y python3 python3-serial python3-pil python3-psutil >/dev/null 2>&1 || true
     elif command -v pacman >/dev/null 2>&1; then
-        echo -e "${CYAN}Pacman paket yöneticisi tespit edildi (Arch/Manjaro)...${NC}"
+        echo -e "${CYAN}Pacman package manager detected (Arch/Manjaro)...${NC}"
         $SUDO_CMD pacman -Sy --noconfirm python python-pyserial python-pillow python-psutil >/dev/null 2>&1 || true
     elif command -v dnf >/dev/null 2>&1; then
-        echo -e "${CYAN}DNF paket yöneticisi tespit edildi (Fedora/RHEL)...${NC}"
+        echo -e "${CYAN}DNF package manager detected (Fedora/RHEL)...${NC}"
         $SUDO_CMD dnf install -y python3 python3-pyserial python3-pillow python3-psutil >/dev/null 2>&1 || true
     elif command -v zypper >/dev/null 2>&1; then
-        echo -e "${CYAN}Zypper paket yöneticisi tespit edildi (openSUSE)...${NC}"
+        echo -e "${CYAN}Zypper package manager detected (openSUSE)...${NC}"
         $SUDO_CMD zypper in -y python3 python3-pyserial python3-Pillow python3-psutil >/dev/null 2>&1 || true
     fi
 
     # Fallback to pip if missing
     if ! python3 -c "import serial, PIL, psutil" 2>/dev/null; then
-        echo -e "${YELLOW}Bazı Python modülleri eksik, pip ile tamamlanıyor...${NC}"
+        echo -e "${YELLOW}Some Python packages are missing, installing via pip...${NC}"
         python3 -m pip install --user --upgrade pyserial pillow psutil >/dev/null 2>&1 || \
         pip install --user --upgrade pyserial pillow psutil >/dev/null 2>&1 || \
         pip install --break-system-packages --user pyserial pillow psutil >/dev/null 2>&1 || true
     fi
 
     if python3 -c "import serial, PIL, psutil" 2>/dev/null; then
-        echo -e "${GREEN}✓ Gerekli Python kütüphaneleri hazır!${NC}"
+        echo -e "${GREEN}✓ Required Python dependencies are satisfied!${NC}"
     else
-        echo -e "${RED}[UYARI] Python kütüphaneleri otomatik yüklenemedi. Manuel yükleyin: pip install pyserial pillow psutil${NC}"
+        echo -e "${RED}[WARNING] Python libraries could not be auto-installed. Install manually: pip install pyserial pillow psutil${NC}"
     fi
 }
 
 install_udev_rules() {
-    echo -e "${GREEN}[2/4] USB Aygıt Erişim İzinleri (udev kuralları) Yapılandırılıyor...${NC}"
+    echo -e "${GREEN}[2/4] Configuring USB Device Permissions (udev rules)...${NC}"
     check_root_for_packages
 
     RULE_CONTENT='# GA36 Clone & R36S CDC-ACM USB Serial Permissions
 KERNEL=="ttyACM[0-9]*", MODE="0666", GROUP="dialout"
 KERNEL=="ttyGS[0-9]*", MODE="0666", GROUP="dialout"
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0104", MODE="0666", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="18d1", ATTRS{idProduct}=="0001", MODE="0666", GROUP="dialout"
 '
 
     echo "$RULE_CONTENT" | $SUDO_CMD tee "$UDEV_RULE_FILE" >/dev/null
     $SUDO_CMD udevadm control --reload-rules 2>/dev/null || true
     $SUDO_CMD udevadm trigger 2>/dev/null || true
 
-    # Also add user to dialout if needed
+    # Also add user to dialout/uucp if needed
     if [ -n "$USER" ]; then
         $SUDO_CMD usermod -aG dialout "$USER" 2>/dev/null || true
+        $SUDO_CMD usermod -aG uucp "$USER" 2>/dev/null || true
     fi
-    echo -e "${GREEN}✓ USB udev kuralları yüklendi (/dev/ttyACM* artık şifresiz açılacak).${NC}"
+    echo -e "${GREEN}✓ USB udev rules installed (/dev/ttyACM* accessible without root).${NC}"
 }
 
 install_systemd_service() {
-    echo -e "${GREEN}[3/4] PC Başlangıç Servisi (systemd user unit) Kuruluyor...${NC}"
+    echo -e "${GREEN}[3/4] Installing Host Companion Service (systemd user unit)...${NC}"
     mkdir -p "$SYSTEMD_USER_DIR"
 
     SERVICE_FILE="${SYSTEMD_USER_DIR}/${SERVICE_NAME}"
@@ -120,11 +122,11 @@ EOF
     systemctl --user daemon-reload
     systemctl --user enable "$SERVICE_NAME"
     systemctl --user restart "$SERVICE_NAME"
-    echo -e "${GREEN}✓ Servis etkinleştirildi ve arka planda başlatıldı (${SERVICE_NAME}).${NC}"
+    echo -e "${GREEN}✓ Service enabled and started in background (${SERVICE_NAME}).${NC}"
 }
 
 verify_and_report() {
-    echo -e "${GREEN}[4/4] Bağlantı ve Donanım Doğrulaması Yapılıyor...${NC}"
+    echo -e "${GREEN}[4/4] Verifying Device Connection & Status...${NC}"
     sleep 1
 
     PORT=""
@@ -137,46 +139,50 @@ verify_and_report() {
 
     echo ""
     echo -e "${GREEN}${BOLD}============================================================${NC}"
-    echo -e "${GREEN}${BOLD} 🎉 KURULUM BAŞARIYLA TAMAMLANDI!${NC}"
+    echo -e "${GREEN}${BOLD} 🎉 SETUP COMPLETED SUCCESSFULLY!${NC}"
     echo -e "${GREEN}${BOLD}============================================================${NC}"
     if [ -n "$PORT" ]; then
-        echo -e " Cihaz Durumu: ${GREEN}BAĞLI (${PORT})${NC}"
-        echo -e " Ekran Akışı : ${GREEN}AKTİF (640x480 Giant Pie Cyber HUD)${NC}"
+        echo -e " Device Status: ${GREEN}CONNECTED (${PORT})${NC}"
+        echo -e " Stream State : ${GREEN}ACTIVE (640x480 Giant Pie Cyber HUD)${NC}"
     else
-        echo -e " Cihaz Durumu: ${YELLOW}Bekleniyor... (Lütfen GA36'yı USB ile bağlayıp açın)${NC}"
+        echo -e " Device Status: ${YELLOW}Waiting... (Please plug in GA36 via USB-C and power on)${NC}"
     fi
-    echo -e " Başlangıç   : ${GREEN}Bilgisayar her açıldığında otomatik başlar${NC}"
+    echo -e " Autostart    : ${GREEN}Automatically starts on user login / system boot${NC}"
     echo -e "${GREEN}${BOLD}============================================================${NC}"
     echo ""
-    echo "Kullanabileceğiniz Komutlar:"
-    echo -e "  ${CYAN}./install.sh status${NC}     -> Servis ve bağlantı durumunu gör"
-    echo -e "  ${CYAN}./install.sh dashboard${NC}  -> Canlı terminal ekranı ve tema değiştirici"
-    echo -e "  ${CYAN}./install.sh stop${NC}       -> Ekran akışını durdur"
-    echo -e "  ${CYAN}./install.sh start${NC}      -> Ekran akışını tekrar başlat"
-    echo -e "  ${CYAN}./install.sh logs${NC}       -> Canlı sistem loglarını izle"
-    echo -e "  ${CYAN}./install.sh image <dosya>${NC} -> Konsol ekranına resim gönder"
-    echo -e "  ${CYAN}./install.sh shell${NC}      -> Konsola canlı root terminali aç"
-    echo -e "  ${CYAN}./install.sh restore${NC}    -> Konsolu orijinal oyun menüsüne döndür"
+    echo "Useful Commands:"
+    echo -e "  ${CYAN}./install.sh status${NC}     -> View service and connection status"
+    echo -e "  ${CYAN}./install.sh mode [theme]${NC} -> Change HUD theme (pie, dual, btop)"
+    echo -e "  ${CYAN}./install.sh dashboard${NC}  -> Interactive terminal dashboard & controls"
+    echo -e "  ${CYAN}./install.sh stop${NC}       -> Stop display stream"
+    echo -e "  ${CYAN}./install.sh start${NC}      -> Start display stream"
+    echo -e "  ${CYAN}./install.sh logs${NC}       -> Tail live system logs"
+    echo -e "  ${CYAN}./install.sh image <file>${NC} -> Send image / wallpaper to console screen"
+    echo -e "  ${CYAN}./install.sh battery${NC}    -> Show battery percentage, voltage & charging"
+    echo -e "  ${CYAN}./install.sh shell${NC}      -> Open interactive root shell on console"
+    echo -e "  ${CYAN}./install.sh restore${NC}    -> Restore console back to stock gaming menu"
+    echo -e "  ${CYAN}./install.sh backup${NC}     -> Create compressed .img.xz SD card backup"
+    echo -e "  ${CYAN}./install.sh uninstall${NC}  -> Remove PC service and udev rules"
     echo ""
 }
 
 cmd_start() {
-    echo -e "${CYAN}Dashboard servisi başlatılıyor...${NC}"
+    echo -e "${CYAN}Starting Dashboard service...${NC}"
     systemctl --user start "$SERVICE_NAME"
-    echo -e "${GREEN}✓ Başlatıldı.${NC}"
+    echo -e "${GREEN}✓ Started.${NC}"
 }
 
 cmd_stop() {
-    echo -e "${YELLOW}Dashboard servisi durduruluyor...${NC}"
+    echo -e "${YELLOW}Stopping Dashboard service...${NC}"
     systemctl --user stop "$SERVICE_NAME"
     systemctl --user stop "$LEGACY_SERVICE_NAME" 2>/dev/null || true
-    echo -e "${GREEN}✓ Durduruldu.${NC}"
+    echo -e "${GREEN}✓ Stopped.${NC}"
 }
 
 cmd_restart() {
-    echo -e "${CYAN}Dashboard servisi yeniden başlatılıyor...${NC}"
+    echo -e "${CYAN}Restarting Dashboard service...${NC}"
     systemctl --user restart "$SERVICE_NAME"
-    echo -e "${GREEN}✓ Yeniden başlatıldı.${NC}"
+    echo -e "${GREEN}✓ Restarted.${NC}"
 }
 
 cmd_status() {
@@ -184,9 +190,9 @@ cmd_status() {
     systemctl --user status "$SERVICE_NAME" --no-pager
     echo ""
     if ls /dev/ttyACM* >/dev/null 2>&1; then
-        echo -e "Tespit edilen USB Portları: ${GREEN}$(ls /dev/ttyACM*)${NC}"
+        echo -e "Detected USB Ports: ${GREEN}$(ls /dev/ttyACM*)${NC}"
     else
-        echo -e "${YELLOW}USB portunda aktif cihaz görünmüyor (USB kablosunu takın).${NC}"
+        echo -e "${YELLOW}No active USB serial port found (ensure USB-C cable is connected).${NC}"
     fi
 }
 
@@ -201,7 +207,7 @@ cmd_dashboard() {
 
 cmd_image() {
     if [ -z "$1" ]; then
-        echo -e "${RED}[HATA] Resim dosyası belirtilmedi! Kullanım: ./install.sh image /resim/yolu.png${NC}"
+        echo -e "${RED}[ERROR] No image file specified! Usage: ./install.sh image /path/to/image.png${NC}"
         exit 1
     fi
     systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
@@ -230,7 +236,7 @@ cmd_restore() {
 
 cmd_uninstall() {
     print_banner
-    echo -e "${YELLOW}GA36 Dashboard PC bileşenleri kaldırılıyor...${NC}"
+    echo -e "${YELLOW}Removing GA36 Dashboard PC components...${NC}"
     systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
     systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
     rm -f "${SYSTEMD_USER_DIR}/${SERVICE_NAME}"
@@ -241,7 +247,7 @@ cmd_uninstall() {
         $SUDO_CMD rm -f "$UDEV_RULE_FILE"
         $SUDO_CMD udevadm control --reload-rules 2>/dev/null || true
     fi
-    echo -e "${GREEN}✓ Servis ve udev kuralları temizlendi.${NC}"
+    echo -e "${GREEN}✓ Service and udev rules cleaned up.${NC}"
 }
 
 # --- Main Dispatcher ---
@@ -297,27 +303,27 @@ case "$ACTION" in
         ;;
     help|--help|-h)
         print_banner
-        echo "Kullanım: ./install.sh [KOMUT]"
+        echo "Usage: ./install.sh [COMMAND]"
         echo ""
-        echo "Komutlar:"
-        echo "  install        -> Tam otomatik kurulum (Varsayılan)"
-        echo "  start          -> Ekran servisini arka planda başlat"
-        echo "  stop           -> Ekran servisini durdur"
-        echo "  restart        -> Servisi yeniden başlat"
-        echo "  status         -> Durum ve USB bağlantısını kontrol et"
-        echo "  logs           -> Canlı sistem loglarını incele"
-        echo "  dashboard      -> Canlı terminal göstergesini aç"
-        echo "  mode [tema]    -> HUD temasını değiştir (pie, dual, btop veya sıradaki)"
-        echo "  image <dosya>  -> Konsola resim / duvar kağıdı gönder"
-        echo "  battery        -> Şarj ve güç detaylarını göster"
-        echo "  shell          -> Konsola tam yetkili root terminali aç"
-        echo "  restore        -> Orijinal konsol oyun menüsüne dön"
-        echo "  backup         -> SD kartın tam .img.xz yedeğini al"
-        echo "  uninstall      -> Servisi ve ayarları kaldır"
+        echo "Commands:"
+        echo "  install        -> Full automated setup & start (Default)"
+        echo "  start          -> Start background display service"
+        echo "  stop           -> Stop background display service"
+        echo "  restart        -> Restart service"
+        echo "  status         -> Check service and USB connection status"
+        echo "  logs           -> Follow live system logs"
+        echo "  dashboard      -> Open interactive terminal dashboard & controls"
+        echo "  mode [theme]   -> Switch HUD theme (pie, dual, btop or next)"
+        echo "  image <file>   -> Push custom image / wallpaper to console screen"
+        echo "  battery        -> Display battery and power status"
+        echo "  shell          -> Open interactive root shell on console"
+        echo "  restore        -> Restore stock gaming menu on console"
+        echo "  backup         -> Create .img.xz backup of SD card"
+        echo "  uninstall      -> Remove service and udev configuration"
         ;;
     *)
-        echo -e "${RED}[HATA] Bilinmeyen komut: '$ACTION'${NC}"
-        echo "Kullanım için: ./install.sh --help"
+        echo -e "${RED}[ERROR] Unknown command: '$ACTION'${NC}"
+        echo "For help run: ./install.sh --help"
         exit 1
         ;;
 esac

@@ -217,7 +217,7 @@ def get_disk_info():
 
 
 def get_media_info():
-    info = {"title": "Müzik çalmıyor", "artist": "", "playing": False}
+    info = {"title": "No media playing", "artist": "", "playing": False}
     if not HAS_DBUS:
         return info
     try:
@@ -231,7 +231,7 @@ def get_media_info():
                 title = str(meta.get("xesam:title", ""))
                 artist_val = meta.get("xesam:artist", [""])
                 artist = str(artist_val[0]) if len(artist_val) > 0 else ""
-                info["title"] = title if title else "Medya"
+                info["title"] = title if title else "Media"
                 info["artist"] = artist
                 info["playing"] = (status.lower() == "playing")
                 break
@@ -275,7 +275,7 @@ class R36SClient:
             self.port = f"TCP:{host}:{port}"
             self.reader_thread = threading.Thread(target=self._tcp_reader_loop, daemon=True)
             self.reader_thread.start()
-            print(f"\n[BAĞLANDI] R36S TCP Ağ Portu: {self.port}")
+            print(f"\n[CONNECTED] GA36 TCP Network Port: {self.port}")
             return True
         except Exception:
             return False
@@ -307,7 +307,7 @@ class R36SClient:
                     self.port = p
                     self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
                     self.reader_thread.start()
-                    print(f"\n[BAĞLANDI] R36S Seri Portu: {self.port}")
+                    print(f"\n[CONNECTED] GA36 Serial Port: {self.port}")
                     return True
                 except Exception:
                     pass
@@ -318,9 +318,9 @@ class R36SClient:
 
             if timeout is not None:
                 rem = max(0, int(timeout - (time.time() - start)))
-                print(f"\rR36S cihazı aranıyor (/dev/ttyACM*)... (Kalan: {rem:02d}s) ", end="", flush=True)
+                print(f"\rSearching for GA36 device (/dev/ttyACM*)... ({rem:02d}s remaining) ", end="", flush=True)
             else:
-                print("\rR36S cihazının açılması/bağlanması bekleniyor (/dev/ttyACM*)... ", end="", flush=True)
+                print("\rWaiting for GA36 connection (/dev/ttyACM*)... ", end="", flush=True)
             time.sleep(0.5)
         print()
         return False
@@ -399,7 +399,7 @@ class R36SClient:
             print(f"Action error: {e}")
 
     def _on_button(self, btn_name):
-        print(f"\n[BUTON BASILDI] R36S Donanım Tuşu: {btn_name}")
+        print(f"\n[BUTTON PRESSED] Hardware Key: {btn_name}")
         if self.button_callback:
             self.button_callback(btn_name)
         else:
@@ -488,28 +488,28 @@ class R36SClient:
 
     def push_file(self, local_path, remote_path):
         if not os.path.exists(local_path):
-            return False, f"Yerel dosya bulunamadı: {local_path}"
+            return False, f"Local file not found: {local_path}"
         try:
             with open(local_path, "rb") as f:
                 data = f.read()
             b64 = base64.b64encode(data).decode("ascii")
             res = self.call_rpc({"type": "write_file", "path": remote_path, "content_b64": b64}, timeout=30)
             if res.get("status") == "ok":
-                return True, f"Yüklendi: {len(data)} bayt -> {remote_path}"
-            return False, f"Hata: {res.get('msg')}"
+                return True, f"Uploaded: {len(data)} bytes -> {remote_path}"
+            return False, f"Error: {res.get('msg')}"
         except Exception as e:
             return False, str(e)
 
     def pull_file(self, remote_path, local_path):
         res = self.call_rpc({"type": "read_file", "path": remote_path}, timeout=30)
         if res.get("status") != "ok":
-            return False, f"Hata: {res.get('msg')}"
+            return False, f"Error: {res.get('msg')}"
         try:
             data = base64.b64decode(res.get("content_b64", ""))
             os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(data)
-            return True, f"İndirildi: {len(data)} bayt -> {local_path}"
+            return True, f"Downloaded: {len(data)} bytes -> {local_path}"
         except Exception as e:
             return False, str(e)
 
@@ -680,7 +680,7 @@ def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     cap = power_info.get("capacity", 0)
     v = power_info.get("voltage_v", 0.0)
     is_charging = (power_info.get("status") == "Charging" or power_info.get("online"))
-    p_str = f"[⚡ OTG ŞARJ: {cap}% ({v}V)]" if is_charging else f"[BATARYA: {cap}% ({v}V)]"
+    p_str = f"[⚡ USB CHG: {cap}% ({v}V)]" if is_charging else f"[BATT: {cap}% ({v}V)]"
     draw.text((435, 12), p_str, fill=C_GREEN if is_charging else C_WHITE, font=FONT_BOLD)
 
     # 4 Quadrants
@@ -689,38 +689,38 @@ def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     temp_pct = min(100, int((cpu["temp"] / 90.0) * 100))
     draw_dual_pie(draw, 88, 132, 52, 40, cpu["usage"], temp_pct, C_CYAN, (0, 180, 216), title="CPU", val_str=f"{cpu['usage']}%", subtitle=f"{cpu['temp']}°C // {cpu['freq']}G")
     draw.text((158, 62), f"{cpu['name']}", fill=C_CYAN, font=FONT_BOLD)
-    draw.text((158, 88), f"Dış Halka : %{cpu['usage']} Yük", fill=C_WHITE, font=FONT_REG)
-    draw.text((158, 110), f"İç Halka  : {cpu['temp']}°C Isı", fill=(0, 180, 216), font=FONT_REG)
-    draw.text((158, 132), f"Saat Hızı : {cpu['freq']} GHz", fill=C_DIM, font=FONT_REG)
-    draw.text((158, 154), f"Çekirdek  : {cpu['cores']} Thread", fill=C_DIM, font=FONT_SMALL)
+    draw.text((158, 88), f"Outer Ring: {cpu['usage']}% Load", fill=C_WHITE, font=FONT_REG)
+    draw.text((158, 110), f"Inner Ring: {cpu['temp']}°C Temp", fill=(0, 180, 216), font=FONT_REG)
+    draw.text((158, 132), f"Clock Rate: {cpu['freq']} GHz", fill=C_DIM, font=FONT_REG)
+    draw.text((158, 154), f"Cores     : {cpu['cores']} Threads", fill=C_DIM, font=FONT_SMALL)
 
     # Q2: GPU (325, 42, 630, 222)
     draw.rectangle([325, 42, 630, 222], fill=C_CARD_BG, outline=C_CARD_BORDER)
     vram_pct = int((gpu["vram_used"] / max(gpu["vram_total"], 0.1)) * 100)
     draw_dual_pie(draw, 403, 132, 52, 40, gpu["usage"], vram_pct, C_PINK, (255, 110, 180), title="GPU", val_str=f"{gpu['usage']}%", subtitle=f"{gpu['temp']}°C // RTX")
     draw.text((473, 62), f"{gpu['name']}", fill=C_PINK, font=FONT_BOLD)
-    draw.text((473, 88), f"Dış Halka : %{gpu['usage']} Yük", fill=C_WHITE, font=FONT_REG)
-    draw.text((473, 110), f"İç Halka  : %{vram_pct} VRAM", fill=(255, 110, 180), font=FONT_REG)
-    draw.text((473, 132), f"Sıcaklık  : {gpu['temp']}°C", fill=C_DIM, font=FONT_REG)
+    draw.text((473, 88), f"Outer Ring: {gpu['usage']}% Load", fill=C_WHITE, font=FONT_REG)
+    draw.text((473, 110), f"Inner Ring: {vram_pct}% VRAM", fill=(255, 110, 180), font=FONT_REG)
+    draw.text((473, 132), f"Temp      : {gpu['temp']}°C", fill=C_DIM, font=FONT_REG)
     draw.text((473, 154), f"Bellek    : {gpu['vram_used']}/{gpu['vram_total']} GB", fill=C_DIM, font=FONT_SMALL)
 
     # Q3: RAM (10, 230, 315, 398)
     draw.rectangle([10, 230, 315, 398], fill=C_CARD_BG, outline=C_CARD_BORDER)
     draw_dual_pie(draw, 88, 314, 52, 40, ram["usage"], ram["swap_usage"], C_GREEN, (0, 180, 140), title="RAM", val_str=f"{ram['usage']}%", subtitle=f"{ram['used_gb']}G")
     draw.text((158, 250), "BELLEK VE SWAP", fill=C_GREEN, font=FONT_BOLD)
-    draw.text((158, 276), f"Dış Halka : %{ram['usage']} RAM", fill=C_WHITE, font=FONT_REG)
-    draw.text((158, 298), f"İç Halka  : %{ram['swap_usage']} SWAP", fill=(0, 180, 140), font=FONT_REG)
-    draw.text((158, 320), f"Kullanılan: {ram['used_gb']}/{ram['total_gb']} GB", fill=C_DIM, font=FONT_REG)
+    draw.text((158, 276), f"Outer Ring: {ram['usage']}% RAM", fill=C_WHITE, font=FONT_REG)
+    draw.text((158, 298), f"Inner Ring: {ram['swap_usage']}% SWAP", fill=(0, 180, 140), font=FONT_REG)
+    draw.text((158, 320), f"Used      : {ram['used_gb']}/{ram['total_gb']} GB", fill=C_DIM, font=FONT_REG)
     draw.text((158, 342), f"SWAP      : {ram['swap_used_gb']} GB", fill=C_DIM, font=FONT_SMALL)
 
     # Q4: DISK & NET (325, 230, 630, 398)
     draw.rectangle([325, 230, 630, 398], fill=C_CARD_BG, outline=C_CARD_BORDER)
     net_activity = min(100, int((net["down_mb"] / 10.0) * 100))
     draw_dual_pie(draw, 403, 314, 52, 40, disk["usage"], net_activity, C_ORANGE, C_CYAN, title="DISK", val_str=f"{disk['usage']}%", subtitle=f"{disk['used_gb']}G")
-    draw.text((473, 250), "DEPOLAMA VE AĞ", fill=C_ORANGE, font=FONT_BOLD)
-    draw.text((473, 276), f"Dış Halka : %{disk['usage']} Disk", fill=C_WHITE, font=FONT_REG)
-    draw.text((473, 298), f"İndirme   : ↓ {net['down_str']}", fill=C_CYAN, font=FONT_BOLD)
-    draw.text((473, 320), f"Yükleme   : ↑ {net['up_str']}", fill=C_ORANGE, font=FONT_BOLD)
+    draw.text((473, 250), "STORAGE & NETWORK", fill=C_ORANGE, font=FONT_BOLD)
+    draw.text((473, 276), f"Outer Ring: {disk['usage']}% Disk", fill=C_WHITE, font=FONT_REG)
+    draw.text((473, 298), f"Download  : ↓ {net['down_str']}", fill=C_CYAN, font=FONT_BOLD)
+    draw.text((473, 320), f"Upload    : ↑ {net['up_str']}", fill=C_ORANGE, font=FONT_BOLD)
     draw.text((473, 342), f"Depolama  : {disk['used_gb']}/{disk['total_gb']} GB", fill=C_DIM, font=FONT_SMALL)
 
     # Bottom Bar
@@ -730,7 +730,7 @@ def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     if media["artist"]:
         m_text += f" - {media['artist']}"
     draw.text((22, 414), m_text[:50], fill=C_CYAN if media["playing"] else C_DIM, font=FONT_BOLD)
-    draw.text((22, 438), "[A] Oynat/Duraklat  [B] Sonraki  [X] Mikrofon  [Y] Ekran Görüntüsü  [SELECT] Tema Değiştir", fill=C_DIM, font=FONT_SMALL)
+    draw.text((22, 438), "[A] Play/Pause  [B] Next  [X] Mic Mute  [Y] Screenshot  [MODE] Cycle Theme", fill=C_DIM, font=FONT_SMALL)
 
     r, g, b = img.split()
     bgra = Image.merge("RGBA", (b, g, r, Image.new("L", (640, 480), 255)))
@@ -761,10 +761,10 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     v = power_info.get("voltage_v", 0.0)
     is_charging = (power_info.get("status") == "Charging" or power_info.get("online"))
     if is_charging:
-        p_str = f"[⚡ OTG ŞARJ: {cap}% ({v}V)]"
+        p_str = f"[⚡ USB CHG: {cap}% ({v}V)]"
         p_col = C_GREEN
     else:
-        p_str = f"[BATARYA: {cap}% ({v}V)]"
+        p_str = f"[BATT: {cap}% ({v}V)]"
         p_col = C_YELLOW if cap < 30 else C_WHITE
     draw.text((440, 12), p_str, fill=p_col, font=FONT_BOLD)
 
@@ -774,10 +774,10 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((250, 50), f"{cpu['usage']}%", fill=C_WHITE, font=FONT_BOLD)
     draw_gauge_bar(draw, 22, 70, 275, 14, cpu["usage"], C_CYAN)
 
-    draw.text((22, 94), f"Sıcaklık  : {cpu['temp']}°C", fill=C_WHITE, font=FONT_REG)
-    draw.text((170, 94), f"Saat Hızı: {cpu['freq']} GHz", fill=C_WHITE, font=FONT_REG)
-    draw.text((22, 114), f"Çekirdek  : {cpu['cores']} Thread", fill=C_DIM, font=FONT_REG)
-    draw.text((22, 138), "CPU Yük Geçmişi:", fill=C_DIM, font=FONT_SMALL)
+    draw.text((22, 94), f"Temp      : {cpu['temp']}°C", fill=C_WHITE, font=FONT_REG)
+    draw.text((170, 94), f"Clock Rate: {cpu['freq']} GHz", fill=C_WHITE, font=FONT_REG)
+    draw.text((22, 114), f"Cores     : {cpu['cores']} Threads", fill=C_DIM, font=FONT_REG)
+    draw.text((22, 138), "CPU Load History:", fill=C_DIM, font=FONT_SMALL)
     draw_sparkline(draw, 22, 155, 275, 50, cpu.get("history", []), 100, C_CYAN)
 
     # 3. GPU Card (Top Right: 325, 42, 630, 222)
@@ -786,11 +786,11 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((565, 50), f"{gpu['usage']}%", fill=C_WHITE, font=FONT_BOLD)
     draw_gauge_bar(draw, 337, 70, 275, 14, gpu["usage"], C_PINK)
 
-    draw.text((337, 94), f"Sıcaklık  : {gpu['temp']}°C", fill=C_WHITE, font=FONT_REG)
+    draw.text((337, 94), f"Temp      : {gpu['temp']}°C", fill=C_WHITE, font=FONT_REG)
     vram_pct = int((gpu["vram_used"] / max(gpu["vram_total"], 0.1)) * 100)
     draw.text((337, 114), f"VRAM      : {gpu['vram_used']} / {gpu['vram_total']} GB ({vram_pct}%)", fill=C_WHITE, font=FONT_REG)
     draw_gauge_bar(draw, 337, 134, 275, 10, vram_pct, C_PINK)
-    draw.text((337, 150), "GPU Yük Geçmişi:", fill=C_DIM, font=FONT_SMALL)
+    draw.text((337, 150), "GPU Load History:", fill=C_DIM, font=FONT_SMALL)
     draw_sparkline(draw, 337, 166, 275, 40, gpu.get("history", []), 100, C_PINK)
 
     # 4. RAM & SWAP Card (Bottom Left: 10, 230, 315, 396)
@@ -802,14 +802,14 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((22, 308), f"SWAP: {ram['swap_used_gb']} / {ram['swap_total_gb']} GB ({ram['swap_usage']}%)", fill=C_DIM, font=FONT_REG)
     draw_gauge_bar(draw, 22, 328, 275, 10, ram["swap_usage"], (0, 180, 216))
 
-    draw.text((22, 355), f"Kullanılabilir: {round(ram['total_gb'] - ram['used_gb'], 1)} GB", fill=C_DIM, font=FONT_SMALL)
+    draw.text((22, 355), f"Available : {round(ram['total_gb'] - ram['used_gb'], 1)} GB", fill=C_DIM, font=FONT_SMALL)
 
     # 5. NETWORK & DISK Card (Bottom Right: 325, 230, 630, 396)
     draw.rectangle([325, 230, 630, 396], fill=C_CARD_BG, outline=C_CARD_BORDER)
-    draw.text((337, 238), "AĞ VE DEPOLAMA", fill=C_ORANGE, font=FONT_BOLD)
+    draw.text((337, 238), "NETWORK & STORAGE", fill=C_ORANGE, font=FONT_BOLD)
 
-    draw.text((337, 262), f"İndirme (Down) : ↓ {net['down_mb']} MB/s", fill=C_CYAN, font=FONT_REG)
-    draw.text((337, 282), f"Yükleme (Up)   : ↑ {net['up_mb']} MB/s", fill=C_ORANGE, font=FONT_REG)
+    draw.text((337, 262), f"Download (Down) : ↓ {net['down_mb']} MB/s", fill=C_CYAN, font=FONT_REG)
+    draw.text((337, 282), f"Upload (Up)     : ↑ {net['up_mb']} MB/s", fill=C_ORANGE, font=FONT_REG)
 
     draw.text((337, 312), f"Depolama (/)   : {disk['used_gb']} / {disk['total_gb']} GB ({disk['usage']}%)", fill=C_WHITE, font=FONT_REG)
     draw_gauge_bar(draw, 337, 332, 275, 12, disk["usage"], C_ORANGE)
@@ -825,7 +825,7 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((22, 412), m_text[:50], fill=C_CYAN if media["playing"] else C_DIM, font=FONT_BOLD)
 
     # Physical button guide
-    btn_guide = "[A] Oynat/Duraklat   [B] Sonraki Parça   [X] Mikrofon   [Y] Ekran Görüntüsü"
+    btn_guide = "[A] Play/Pause   [B] Next Track   [X] Mic Mute   [Y] Screenshot"
     draw.text((22, 436), btn_guide, fill=C_DIM, font=FONT_SMALL)
 
     # Convert to 32-bit BGRA
@@ -838,79 +838,79 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
 # Command Modes
 # -------------------------------------------------------------
 def mode_test(client):
-    print("\n[TEST] R36S Bağlantı ve Durum Analizi Yapılıyor...")
+    print("\n[TEST] Checking GA36 / R36S connection and state...")
     res = client.ping()
     if res.get("status") == "ok":
         p = res.get("power", {})
         print("\n" + "=" * 55)
-        print(" [BAŞARILI] R36S USB İLETİŞİM PROTOKOLÜ VE AJAN AKTİF!")
+        print(" [SUCCESS] GA36 / R36S USB PROTOCOL & AGENT ACTIVE!")
         print("=" * 55)
-        print(f" Ajan Sürümü  : {res.get('agent')} v{res.get('version')}")
-        print(f" Yetki        : root ({res.get('user')})")
-        print(f" Konsol Saati : {res.get('time')}")
-        print(f" Çalışma Süresi: {int(res.get('uptime_sec', 0))} saniye")
-        print(f" Ekran        : {res.get('screen', {}).get('width')}x{res.get('screen', {}).get('height')} IPS (32-bit)")
-        print(f" OTG Şarj     : {'AKTİF (USB Gücü Alınıyor)' if p.get('online') else 'Pilden Çalışıyor'}")
-        print(f" Batarya      : %{p.get('capacity')} ({p.get('status')}) - {p.get('voltage_v')}V")
+        print(f" Agent Version : {res.get('agent')} v{res.get('version')}")
+        print(f" Privilege     : root ({res.get('user')})")
+        print(f" Console Time  : {res.get('time')}")
+        print(f" Uptime        : {int(res.get('uptime_sec', 0))} seconds")
+        print(f" Display       : {res.get('screen', {}).get('width')}x{res.get('screen', {}).get('height')} IPS (32-bit)")
+        print(f" USB Power    : {'ACTIVE (Host Power)' if p.get('online') else 'Battery Power'}")
+        print(f" Battery      : %{p.get('capacity')} ({p.get('status')}) - {p.get('voltage_v')}V")
         print("=" * 55)
 
         if res.get("version") != "3.2":
-            print("\n[OTOMATİK GÜNCELLEME] Ajan v3.2 sürümüne yükseltiliyor (Güç senkronizasyonu & ultra temiz göstergeler)...")
+            print("\n[AUTO-UPDATE] Upgrading Agent to v3.2...")
             mode_update_agent(client)
 
-        print("\nKullanabileceğiniz Komutlar:")
-        print("  ./r36s.sh dashboard       -> Canlı 'btop' donanım ekranını başlat (titremesiz)")
-        print("  ./r36s.sh image <dosya>   -> Ekrana özel resim / duvar kağıdı bas ve sabitle")
-        print("  ./r36s.sh resume          -> EmulationStation oyun menüsünü geri getir")
-        print("  ./r36s.sh battery         -> Şarj ve güç durumunu detaylı izle")
-        print("  ./r36s.sh restore         -> Silinen emülatör ve temaları yedekten geri yükle")
-        print("  ./r36s.sh shell           -> Tam yetkili canlı root terminali")
-        print("  ./r36s.sh clear           -> Konsol ekranını temizle")
+        print("\nAvailable Commands:")
+        print("  ./install.sh dashboard       -> Start live hardware dashboard (zero-flicker)")
+        print("  ./install.sh image <file>    -> Send image/wallpaper to console screen")
+        print("  ./install.sh resume          -> Resume EmulationStation gaming menu")
+        print("  ./install.sh battery         -> Monitor battery and power status")
+        print("  ./install.sh restore         -> Restore stock gaming system from backup")
+        print("  ./install.sh shell           -> Open interactive live root shell")
+        print("  ./install.sh clear           -> Clear console screen")
     else:
-        print(f"\n[HATA] R36S yanıt vermedi: {res.get('msg')}")
-        print("\nÇözüm Adımları:")
-        print("  1. Type-C OTG kablosunu bilgisayardan çıkarıp tekrar takın (USB arabelleği sıfırlansın).")
-        print("  2. Konsolu EmulationStation üzerinden yeniden başlatın: (START tuşu -> QUIT -> RESTART SYSTEM).")
+        print(f"\n[ERROR] GA36 did not respond: {res.get('msg')}")
+        print("\nTroubleshooting Steps:")
+        print("  1. Re-plug USB-C cable to reset USB serial buffer.")
+        print("  2. Restart console via EmulationStation or reboot command.")
 
 
 def mode_battery(client):
     print("\n" + "=" * 50)
-    print(" R36S Güç ve Şarj Denetimi (AXP223 PMIC)")
+    print(" GA36 Power & Battery Diagnostics (AXP223 PMIC)")
     print("=" * 50)
     p = client.get_power()
-    print(f" OTG Girişi       : {'Bağlı ve Aktif' if p.get('online') else 'Bağlantı Yok'}")
-    print(f" Şarj Durumu      : {p.get('status')}")
-    print(f" Batarya Seviyesi : %{p.get('capacity')}")
-    print(f" Gerilim (Volt)   : {p.get('voltage_v')} V")
-    print(f" Akım (Miliamper) : {p.get('current_ma')} mA")
+    print(f" USB Input        : {'Connected & Active' if p.get('online') else 'Disconnected'}")
+    print(f" Charging Status  : {p.get('status')}")
+    print(f" Battery Level    : %{p.get('capacity')}")
+    print(f" Voltage          : {p.get('voltage_v')} V")
+    print(f" Current          : {p.get('current_ma')} mA")
     if p.get("temp_c"):
-        print(f" Pil Sıcaklığı    : {p.get('temp_c')} °C")
+        print(f" Battery Temp     : {p.get('temp_c')} °C")
     print("=" * 50)
 
 
 def mode_image(client, image_path):
     if not os.path.exists(image_path):
-        print(f"\n[HATA] Belirtilen resim dosyası bulunamadı: {image_path}")
+        print(f"\n[ERROR] Specified image file not found: {image_path}")
         return
-    print(f"\n[RESİM] '{image_path}' yükleniyor ve 640x480 formatına işleniyor...")
+    print(f"\n[IMAGE] Loading '{image_path}' and rendering to 640x480...")
     try:
         compressed = prepare_image_frame(image_path)
-        print(f"  Görüntü sıkıştırıldı ({len(compressed)} bayt). Ekrana aktarılıyor...")
+        print(f"  Image compressed ({len(compressed)} bytes). Transferring to display...")
         client.pause_gui()
         res = client.display_frame_raw(compressed)
         if res.get("status") == "ok":
-            print("\n[BAŞARILI] Resim R36S ekranına anında basıldı ve sabitlendi! (640x480 IPS)")
-            print("  Konsol menüsüne dönmek için Ctrl+C tuşlayın...")
+            print("\n[SUCCESS] Image rendered and pinned to GA36 display! (640x480 IPS)")
+            print("  Press Ctrl+C to return to menu...")
             try:
                 while True:
                     time.sleep(0.5)
             except KeyboardInterrupt:
-                print("\nEmulationStation menüsüne dönülüyor...")
+                print("\nReturning to EmulationStation menu...")
                 client.resume_gui()
         else:
-            print(f"\n[HATA] Resim ekrana verilemedi: {res.get('msg')}")
+            print(f"\n[ERROR] Failed to output image: {res.get('msg')}")
     except Exception as e:
-        print(f"\n[HATA] Resim işleme hatası: {e}")
+        print(f"\n[ERROR] Image processing error: {e}")
 
 
 THEME_FILE = os.path.expanduser("~/.config/ga36/theme")
@@ -943,20 +943,20 @@ def mode_dashboard(client, theme=None):
         current_theme = get_saved_theme()
 
     print("\n" + "=" * 60)
-    print(" GA36 / R36S CYBER CANLI DONANIM HUD AKTİF!")
-    print(f" Aktif Tema: {current_theme.upper()}")
-    print(" R36S ekranında gerçek zamanlı veriler akmaktadır.")
-    print(" Fiziksel Gamepad Tuşları:")
-    print("   [ A ]           -> Medya Oynat / Duraklat")
-    print("   [ B ]           -> Sonraki Şarkı")
-    print("   [ X ]           -> Mikrofonu Sustur / Aç")
-    print("   [ Y ]           -> Ekran Görüntüsü Al")
-    print("   [ SELECT/MODE ] -> Temayı Değiştir (PIE ➔ DUAL ➔ BTOP)")
-    print("   [ DPAD SOL/SAĞ ]-> Temalar Arasında Gezin")
-    print(" Çıkmak için terminalde Ctrl+C tuşlarına basın.")
+    print(" GA36 / R36S CYBER HARDWARE HUD ACTIVE!")
+    print(f" Active Theme: {current_theme.upper()}")
+    print(" Streaming real-time metrics to console display.")
+    print(" Physical Gamepad Controls:")
+    print("   [ A ]           -> Media Play / Pause")
+    print("   [ B ]           -> Next Track")
+    print("   [ X ]           -> Toggle Microphone Mute")
+    print("   [ Y ]           -> Capture Screenshot")
+    print("   [ SELECT/MODE ] -> Cycle Theme (PIE ➔ DUAL ➔ BTOP)")
+    print("   [ DPAD LEFT/RIGHT ] -> Switch Themes")
+    print(" Press Ctrl+C in terminal to exit.")
     print("=" * 60 + "\n")
 
-    print("[BİLGİ] Titremeyi önlemek için EmulationStation duraklatılıyor...")
+    print("[INFO] Pausing EmulationStation to prevent flicker...")
     client.pause_gui()
 
     def handle_btn(btn_name):
@@ -971,7 +971,7 @@ def mode_dashboard(client, theme=None):
                 idx = (themes.index(current_theme) + 1) % len(themes)
             current_theme = themes[idx]
             save_active_theme(current_theme)
-            print(f"\n[TEMA DEĞİŞTİ] Yeni HUD Modu: {current_theme.upper()}    ")
+            print(f"\n[THEME CHANGED] New HUD Mode: {current_theme.upper()}    ")
         else:
             client.default_button_action(btn_name)
 
@@ -1010,7 +1010,7 @@ def mode_dashboard(client, theme=None):
             saved_theme = get_saved_theme()
             if saved_theme != current_theme:
                 current_theme = saved_theme
-                print(f"\n[TEMA GÜNCELLENDİ] Yeni HUD Modu: {current_theme.upper()}    ")
+                print(f"\n[THEME UPDATED] New HUD Mode: {current_theme.upper()}    ")
 
             # Gather host metrics
             cpu = get_cpu_info()
@@ -1031,7 +1031,7 @@ def mode_dashboard(client, theme=None):
             # Send to R36S screen
             res = client.display_frame_raw(comp_frame)
             if res.get("status") != "ok":
-                print(f"\r[BAĞLANTI YENİLENİYOR] Port yanıt vermedi ({res.get('msg')}), yeniden bağlanılıyor... ", end="", flush=True)
+                print(f"\r[RECONNECTING] Port unresponsive ({res.get('msg')}), reconnecting... ", end="", flush=True)
                 client.reconnect(timeout=2)
                 time.sleep(0.3)
                 continue
@@ -1045,17 +1045,17 @@ def mode_dashboard(client, theme=None):
             print(f"\r[{theme_label} HUD] {clock_now} | CPU: %{cpu['usage']:02d} ({cpu['temp']}°C) | GPU: %{gpu['usage']:02d} ({gpu['temp']}°C) | RAM: %{ram['usage']:02d} | Net: {net['down_str']} | FPS: {fps} ", end="", flush=True)
 
             dt = time.time() - t0
-            time.sleep(max(0.05, 0.40 - dt))  # ~2.5 FPS Ultra Eco-Smooth (R36S CPU < %1.5, ısınmaz, bataryayı tüketmez!)
+            time.sleep(max(0.05, 0.40 - dt))  # ~2.5 FPS Ultra Eco-Smooth (R36S CPU < %1.5, low CPU load, cool & battery efficient)
 
     except KeyboardInterrupt:
-        print("\n\nCanlı donanım monitörü sonlandırıldı.")
-        print("[BİLGİ] Konsol oyun menüsünü geri açmak isterseniz: ./r36s.sh resume")
+        print("\n\nLive hardware monitor stopped.")
+        print("[INFO] To reopen console game menu: ./install.sh resume")
 
 
 def mode_shell(client):
     print("\n" + "=" * 55)
-    print(" R36S Canlı Root Terminali (USB Serial Köprüsü)")
-    print(" Çıkmak için 'exit' veya 'quit' yazın.")
+    print(" GA36 Live Root Shell (USB Serial Bridge)")
+    print(" Type 'exit' or 'quit' to exit.")
     print("=" * 55)
 
     client.shell_exec("pwd")
@@ -1067,7 +1067,7 @@ def mode_shell(client):
             if not user_input:
                 continue
             if user_input in ("exit", "quit"):
-                print("Terminal oturumu sonlandırıldı.")
+                print("Terminal session closed.")
                 break
             if user_input == "clear":
                 os.system("clear")
@@ -1083,7 +1083,7 @@ def mode_shell(client):
                 if not stderr.endswith("\n"):
                     print(file=sys.stderr)
         except (KeyboardInterrupt, EOFError):
-            print("\nTerminal oturumu kapatıldı.")
+            print("\nTerminal session closed.")
             break
 
 
@@ -1098,7 +1098,7 @@ def mode_exec(client, cmd_str):
             print(stderr, end="", file=sys.stderr)
         sys.exit(res.get("code", 0))
     else:
-        print(f"[HATA] {res.get('msg')}", file=sys.stderr)
+        print(f"[ERROR] {res.get('msg')}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -1112,26 +1112,26 @@ def mode_update_agent(client):
                 local_agent = cand
                 break
     if not os.path.exists(local_agent):
-        print(f"[HATA] Yerel ga36_agent.py bulunamadı: {local_agent}")
+        print(f"[ERROR] Local ga36_agent.py not found: {local_agent}")
         return
-    print("\n[GÜNCELLEME] GA36/R36S Agent v3.2 konsola yükleniyor...")
+    print("\n[UPDATE] Uploading GA36 Agent v3.2 to console...")
     for target in ["/storage/pc_link/r36s_agent.py", "/storage/roms/pc_display/r36s_agent.py"]:
         ok, msg = client.push_file(local_agent, target)
         print(f"  {target}: {msg}")
-    print("  Ajan izinleri ayarlanıyor...")
+    print("  Setting executable permissions...")
     client.exec_cmd("chmod +x /storage/pc_link/r36s_agent.py /storage/roms/pc_display/r36s_agent.py 2>/dev/null")
-    print("[BAŞARILI] R36S Agent dosyaları v3.2 sürümüne güncellendi!")
+    print("[SUCCESS] Agent files successfully updated to v3.2!")
 
 
 def mode_poweroff(client):
-    print("\n[GÜÇ] R36S konsolu kapatılıyor...")
+    print("\n[POWER] Powering off console...")
     res = client.call_rpc({"type": "poweroff"}, timeout=3)
     if res.get("status") == "ok":
-        print("[BAŞARILI] R36S kapatma sinyali iletildi. Cihaz güvenle kapanıyor.")
+        print("[SUCCESS] Poweroff signal sent. Console shutting down.")
     else:
         # Fallback to direct shell execution
         client.exec_cmd("systemctl poweroff || poweroff", timeout=3)
-        print("[BİLGİ] Kapatma komutu iletildi.")
+        print("[INFO] Shutdown command sent.")
 
 
 # -------------------------------------------------------------
@@ -1141,9 +1141,9 @@ def main():
     parser = argparse.ArgumentParser(description="GA36 / R36S Live Sync & Control Suite v3.2")
     parser.add_argument("command", nargs="?", default="test",
                         choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "mode", "theme", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
-                        help="Çalıştırma modu")
-    parser.add_argument("args", nargs="*", help="Komut parametreleri")
-    parser.add_argument("--port", "-p", default=None, help="Seri port (örn: /dev/ttyACM0)")
+                        help="Operating mode")
+    parser.add_argument("args", nargs="*", help="Command arguments")
+    parser.add_argument("--port", "-p", default=None, help="Serial port (e.g. /dev/ttyACM0)")
 
     parsed = parser.parse_args()
 
@@ -1156,15 +1156,15 @@ def main():
         if parsed.args:
             target = parsed.args[0].lower().strip()
             if target not in themes:
-                print(f"[HATA] Geçersiz tema: '{target}'. Seçenekler: {', '.join(themes)}")
+                print(f"[ERROR] Invalid theme: '{target}'. Options: {', '.join(themes)}")
                 sys.exit(1)
         else:
             idx = (themes.index(cur) + 1) % len(themes)
             target = themes[idx]
         save_active_theme(target)
         print("\n" + "=" * 60)
-        print(f" [BAŞARILI] HUD Modu Güncellendi: {target.upper()} (Önceki: {cur.upper()})")
-        print(" Ekrandaki gösterge anında yeni temaya geçecektir.")
+        print(f" [SUCCESS] HUD Mode Updated: {target.upper()} (Previous: {cur.upper()})")
+        print(" The screen display will update immediately.")
         print("=" * 60 + "\n")
         sys.exit(0)
 
@@ -1175,9 +1175,9 @@ def main():
     client = R36SClient(port=parsed.port)
     conn_timeout = None if cmd in ("dashboard", "stream") else 30
     if not client.connect(timeout=conn_timeout):
-        print("\n[HATA] R36S cihazı bulunamadı (/dev/ttyACM*)!")
-        print("1. Konsolun açık olduğundan emin olun.")
-        print("2. Type-C kablosunun R36S üzerindeki OTG (sağdaki) porta takılı olduğunu kontrol edin.")
+        print("\n[ERROR] GA36 device not found (/dev/ttyACM*)!")
+        print("1. Make sure console is powered on.")
+        print("2. Ensure the USB-C cable is connected to the OTG (right) port.")
         sys.exit(1)
 
     try:
@@ -1187,7 +1187,7 @@ def main():
             mode_battery(client)
         elif cmd == "image":
             if not parsed.args:
-                print("\nKullanım: ./r36s.sh image <resim_dosyası.png|jpg|bmp>")
+                print("\nUsage: ./install.sh image <image_file.png|jpg|bmp>")
             else:
                 mode_image(client, parsed.args[0])
         elif cmd in ("dashboard", "stream"):
@@ -1204,49 +1204,49 @@ def main():
             path = parsed.args[0] if parsed.args else "/storage"
             res = client.list_dir(path)
             if res.get("status") == "ok":
-                print(f"\n{path} dizin içeriği:")
+                print(f"\n{path} directory listing:")
                 for e in res.get("entries", []):
                     prefix = "📁 [DIR] " if e.get("is_dir") else "📄 [FILE]"
                     print(f"  {prefix} {e.get('name'):<30} {e.get('size'):>10} bayt")
             else:
-                print(f"[HATA] {res.get('msg')}")
+                print(f"[ERROR] {res.get('msg')}")
         elif cmd == "push":
             if len(parsed.args) < 1:
-                print("\nKullanım: ./r36s.sh push <yerel_dosya> [uzak_hedef]")
+                print("\nUsage: ./install.sh push <local_file> [remote_target]")
             else:
                 loc = parsed.args[0]
                 rem = parsed.args[1] if len(parsed.args) > 1 else f"/storage/{os.path.basename(loc)}"
                 ok, msg = client.push_file(loc, rem)
-                print(f"[{'BAŞARILI' if ok else 'HATA'}] {msg}")
+                print(f"[{'SUCCESS' if ok else 'ERROR'}] {msg}")
         elif cmd == "pull":
             if len(parsed.args) < 1:
-                print("\nKullanım: ./r36s.sh pull <uzak_dosya> [yerel_hedef]")
+                print("\nUsage: ./install.sh pull <remote_file> [local_target]")
             else:
                 rem = parsed.args[0]
                 loc = parsed.args[1] if len(parsed.args) > 1 else f"./{os.path.basename(rem)}"
                 ok, msg = client.pull_file(rem, loc)
-                print(f"[{'BAŞARILI' if ok else 'HATA'}] {msg}")
+                print(f"[{'SUCCESS' if ok else 'ERROR'}] {msg}")
         elif cmd == "clear":
             client.clear_screen()
-            print("\n[BAŞARILI] R36S ekranı temizlendi (siyah).")
+            print("\n[SUCCESS] Console screen cleared (black).")
         elif cmd == "pause":
             client.pause_gui()
-            print("\n[BAŞARILI] EmulationStation duraklatıldı (ekran artık serbest).")
+            print("\n[SUCCESS] EmulationStation paused (display free).")
         elif cmd == "resume":
             client.resume_gui()
-            print("\n[BAŞARILI] EmulationStation menüsü geri getirildi.")
+            print("\n[SUCCESS] EmulationStation menu resumed.")
         elif cmd == "restore":
-            print("\n[GERİ YÜKLEME] Emülatörler, RetroArch kütüphaneleri ve temalar geri yükleniyor...")
+            print("\n[RESTORE] Restoring emulators, libraries, and themes...")
             res = client.exec_cmd("/bin/bash /storage/roms/backup/RESTORE_ALL.sh", timeout=120)
             if res.get("status") == "ok":
-                print("\n[BAŞARILI] Sistem yedeği eksiksiz olarak orijinal haline döndürüldü!")
+                print("\n[SUCCESS] System restored to stock configuration successfully!")
             else:
-                print(f"\n[HATA] Geri yükleme başarısız: {res.get('msg')}")
+                print(f"\n[ERROR] Restore failed: {res.get('msg')}")
         elif cmd in ("update-agent", "upgrade"):
             mode_update_agent(client)
         elif cmd == "reboot":
             client.call_rpc({"type": "reboot"})
-            print("\n[BİLGİ] R36S konsolu yeniden başlatılıyor...")
+            print("\n[INFO] Rebooting console...")
         elif cmd == "poweroff":
             mode_poweroff(client)
     finally:

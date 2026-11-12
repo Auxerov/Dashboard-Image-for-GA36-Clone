@@ -22,7 +22,7 @@ echo " GA36 Clone Direct USB Mod Deployer"
 echo "============================================================"
 echo -e "${NC}"
 
-echo -e "${GREEN}[1/3] Cihaz taranıyor...${NC}"
+echo -e "${GREEN}[1/3] Scanning for connected console...${NC}"
 python3 -c "
 import sys, os
 sys.path.append('${REPO_DIR}')
@@ -30,10 +30,10 @@ from ga36_dashboard import R36SClient
 
 client = R36SClient()
 if not client.connect(timeout=10):
-    print('[HATA] Konsola bağlanılamadı! Lütfen USB kablosunu kontrol edin.')
+    print('[ERROR] Could not connect to console! Please check the USB-C cable.')
     sys.exit(1)
 
-print('[BAĞLANDI] Konsol tespit edildi! Dosyalar yükleniyor...')
+print('[CONNECTED] Console detected! Deploying files...')
 
 # 1. Push agent files
 agent_local = '${REPO_DIR}/device/ga36_agent.py'
@@ -50,17 +50,20 @@ client.push_file(restore_local, '/storage/roms/backup/RESTORE_ALL.sh')
 
 client.exec_cmd('chmod +x /storage/pc_link/*.py /storage/pc_link/*.sh /storage/roms/backup/*.sh')
 
-# 2. Mask emustation
-print('[2/3] EmulationStation maskeleniyor (titremesiz doğrudan açılış)...')
+# 2. Mask EmulationStation
+print('[2/3] Masking EmulationStation (direct zero-flicker boot)...')
 client.exec_cmd('systemctl mask emustation.service 2>/dev/null; systemctl stop emustation.service 2>/dev/null')
 
-# 3. Audio mute
-print('[3/3] Menü müzikleri ve ses çıkışı kapatılıyor...')
-client.exec_cmd('sed -i \"s/audio.bgmusic=1/audio.bgmusic=0/g\" /storage/.config/emuelec/configs/emuelec.conf 2>/dev/null; amixer cset name=\"Audio speaker out\" 0 2>/dev/null; amixer cset name=\"Master Playback Volume\" 0 2>/dev/null')
+# 3. Audio hardware mute & clean
+print('[3/3] Disabling audio daemons and silencing hardware output...')
+client.exec_cmd('killall -9 pulseaudio 2>/dev/null ; ln -sf /dev/null /storage/.config/system.d/pulseaudio.service ; ln -sf /dev/null /etc/systemd/system/pulseaudio.service 2>/dev/null')
+client.exec_cmd('amixer cset name=\"Speaker Function\" headset 2>/dev/null ; amixer cset name=\"Audio speaker out\" 0 2>/dev/null ; amixer cset name=\"Master Playback Volume\" 0 2>/dev/null ; true')
+client.exec_cmd('sed -i \"s/audio.bgmusic=1/audio.bgmusic=0/g\" /storage/.config/emuelec/configs/emuelec.conf 2>/dev/null ; sed -i \"s/audio.volume=.*/audio.volume=0/g\" /storage/.config/emuelec/configs/emuelec.conf 2>/dev/null')
+client.exec_cmd('rm -rf /storage/assets/sounds /storage/roms/bgm ; find /storage -type f \\( -name \"*.mp3\" -o -name \"*.wav\" -o -name \"*.ogg\" -o -name \"*.flac\" -o -name \"*.aac\" -o -name \"*.m4a\" \\) -delete 2>/dev/null ; true')
 
 client.exec_cmd('sync')
 client.close()
-print('\n[BAŞARILI] GA36 konsolu doğrudan Dashboard moduna geçirildi!')
+print('\n[SUCCESS] GA36 console successfully configured for Dashboard mode!')
 "
 
-echo -e "${GREEN}${BOLD}Cihaz hazır! Artık './install.sh start' ile kullanabilirsiniz.${NC}"
+echo -e "${GREEN}${BOLD}Console is ready! You can now start with './install.sh start'.${NC}"

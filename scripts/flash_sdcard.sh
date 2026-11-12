@@ -32,17 +32,17 @@ for mount in $(lsblk -n -o MOUNTPOINT 2>/dev/null | grep -v "^$"); do
 done
 
 if [ -z "$STORAGE_MOUNT" ]; then
-    echo -e "${YELLOW}SD kartın 'STORAGE' (ext4) bölümü otomatik bulunamadı.${NC}"
-    echo "Lütfen SD kartın STORAGE bölümünün bağlı olduğu dizini girin (Örn: /media/user/STORAGE): "
-    read -rp "Dizin: " STORAGE_MOUNT
+    echo -e "${YELLOW}Could not automatically detect the 'STORAGE' partition of the SD card.${NC}"
+    echo "Please enter the mount directory of the STORAGE partition (e.g. /media/user/STORAGE): "
+    read -rp "Mount path: " STORAGE_MOUNT
 fi
 
 if [ ! -d "$STORAGE_MOUNT" ]; then
-    echo -e "${RED}[HATA] '$STORAGE_MOUNT' dizini mevcut değil!${NC}"
+    echo -e "${RED}[ERROR] Directory '$STORAGE_MOUNT' does not exist!${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}[1/3] Dashboard dosyaları kopyalanıyor -> ${STORAGE_MOUNT}...${NC}"
+echo -e "${GREEN}[1/3] Copying dashboard files -> ${STORAGE_MOUNT}...${NC}"
 mkdir -p "${STORAGE_MOUNT}/pc_link"
 mkdir -p "${STORAGE_MOUNT}/.config/profile.d"
 mkdir -p "${STORAGE_MOUNT}/.config/system.d"
@@ -51,21 +51,21 @@ cp -v "${OVERLAY_DIR}/storage/pc_link/r36s_agent.py" "${STORAGE_MOUNT}/pc_link/"
 cp -v "${OVERLAY_DIR}/storage/pc_link/usb_gadget_setup.sh" "${STORAGE_MOUNT}/pc_link/"
 cp -v "${OVERLAY_DIR}/storage/.config/profile.d/90-pc_link.conf" "${STORAGE_MOUNT}/.config/profile.d/"
 ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
+ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/pulseaudio.service" 2>/dev/null || true
 
 chmod +x "${STORAGE_MOUNT}/pc_link/"*.py "${STORAGE_MOUNT}/pc_link/"*.sh
 
-echo -e "${GREEN}[2/3] EmulationStation titreme önleme maskesi uygulanıyor...${NC}"
-# In case system.d needs direct mask
-mkdir -p "${STORAGE_MOUNT}/.config/system.d"
+echo -e "${GREEN}[2/3] Applying zero-flicker and silent boot masks...${NC}"
 ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
+ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/pulseaudio.service" 2>/dev/null || true
 
-echo -e "${GREEN}[3/3] Değişiklikler diske yazılıyor (sync)...${NC}"
+echo -e "${GREEN}[3/3] Flushing changes to disk (sync)...${NC}"
 sync
 
 echo ""
 echo -e "${GREEN}${BOLD}============================================================${NC}"
-echo -e "${GREEN}${BOLD} [BAŞARILI] GA36 SD Kartı Dashboard Moduna Geçirildi!${NC}"
+echo -e "${GREEN}${BOLD} [SUCCESS] GA36 SD Card Configured for Dashboard Mode!${NC}"
 echo -e "${GREEN}${BOLD}============================================================${NC}"
-echo "Kartı konsolunuza takıp USB kablosuyla bilgisayarınıza bağlayın."
-echo "Ardından bilgisayarınızda './install.sh start' çalıştırmanız yeterlidir."
+echo "Insert the card into your console, power on, and connect via USB-C."
+echo "Then on your computer simply run: ./install.sh start"
 echo -e "${GREEN}============================================================${NC}"
