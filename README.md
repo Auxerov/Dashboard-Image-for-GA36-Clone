@@ -11,9 +11,9 @@
 
 ## 📸 Ekran Görüntüleri / Screenshots
 
-| 4 Dev Halka / Giant 4-Pie HUD (Varsayılan) | Çift Halka / Dual Ring HUD | Cyber 'btop' HUD |
-|:---:|:---:|:---:|
-| ![Giant Pie HUD](docs/assets/dashboard_preview.png) | ![Dual Ring HUD](docs/assets/dual_preview.png) | ![btop HUD](docs/assets/btop_preview.png) |
+| Cyber Boot Splash | 4 Dev Halka / Giant 4-Pie HUD | Çift Halka / Dual Ring HUD | Cyber 'btop' HUD |
+|:---:|:---:|:---:|:---:|
+| ![Boot Splash](docs/assets/splash_preview.png) | ![Giant Pie HUD](docs/assets/dashboard_preview.png) | ![Dual Ring HUD](docs/assets/dual_preview.png) | ![btop HUD](docs/assets/btop_preview.png) |
 
 ---
 
