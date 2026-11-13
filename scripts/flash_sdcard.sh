@@ -74,8 +74,36 @@ $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.png" "${STORAGE_MOUNT}/pc_lin
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/pc_link/splash.raw" 2>/dev/null || true
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/bootlogo.bmp" "${STORAGE_MOUNT}/pc_link/bootlogo.bmp" 2>/dev/null || true
 
-# Clean up any leftover experimental services that broke systemd boot
-$SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/custom_start.sh" 2>/dev/null || true
+# Create guaranteed boot hooks for EmuELEC & LibreELEC
+cat << 'EOF' | $SUDO_CMD tee "${STORAGE_MOUNT}/.config/custom_start.sh" >/dev/null
+#!/bin/bash
+# GA36 PC Link Early Boot Hook (custom_start.sh)
+if mkdir /tmp/.r36s_link_lock 2>/dev/null; then
+    (
+        if [ -f /storage/pc_link/splash.raw ]; then
+            cat /storage/pc_link/splash.raw > /dev/fb0 2>/dev/null || true
+        fi
+        if [ -f /storage/pc_link/usb_gadget_setup.sh ]; then
+            /bin/bash /storage/pc_link/usb_gadget_setup.sh >> /storage/usb_boot.log 2>&1
+        fi
+        SERIAL_DEV="/dev/ttyGS0"
+        for i in $(seq 1 15); do
+            for cand in /dev/ttyGS0 /dev/ttygserial /dev/ttyGS* /dev/ttyACM*; do
+                [ -e "$cand" ] && SERIAL_DEV="$cand" && break 2
+            done
+            sleep 0.2
+        done
+        if [ -f /storage/pc_link/r36s_agent.py ]; then
+            python3 /storage/pc_link/r36s_agent.py --daemon --dev "$SERIAL_DEV" --port 8888 >> /storage/usb_boot.log 2>&1 &
+        fi
+    ) >/dev/null 2>&1 &
+fi
+EOF
+
+$SUDO_CMD cp -vf "${STORAGE_MOUNT}/.config/custom_start.sh" "${STORAGE_MOUNT}/.config/autostart.sh" 2>/dev/null || true
+$SUDO_CMD chmod +x "${STORAGE_MOUNT}/.config/custom_start.sh" "${STORAGE_MOUNT}/.config/autostart.sh" 2>/dev/null || true
+
+# Clean up any broken systemd locks or deadlocks
 $SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/system.d/ga36-link.service" 2>/dev/null || true
 $SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/system.d/basic.target.wants/ga36-link.service" 2>/dev/null || true
 $SUDO_CMD rm -f "${STORAGE_MOUNT}/storage/pc_link/launch_dashboard.sh" 2>/dev/null || true
@@ -93,8 +121,26 @@ done
 
 $SUDO_CMD chmod +x "${STORAGE_MOUNT}/pc_link/"*.py "${STORAGE_MOUNT}/pc_link/"*.sh
 
-echo -e "${GREEN}[2/4] Configuring zero-retro UI (masking EmulationStation)...${NC}"
-$SUDO_CMD ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
+echo -e "${GREEN}[2/4] Configuring zero-retro UI (Replacing EmulationStation with Dashboard Agent)...${NC}"
+# CRITICAL: Never mask emustation to /dev/null because systemd autostart deadlocks on it.
+# Instead, replace emustation.service with our lightweight dashboard agent unit.
+cat << 'EOF' | $SUDO_CMD tee "${STORAGE_MOUNT}/.config/system.d/emustation.service" >/dev/null
+[Unit]
+Description=GA36 Dedicated PC Dashboard Agent
+After=basic.target
+
+[Service]
+Type=simple
+Environment=HOME=/storage
+ExecStartPre=-/bin/bash /storage/pc_link/usb_gadget_setup.sh
+ExecStart=/usr/bin/python3 /storage/pc_link/r36s_agent.py --daemon --dev /dev/ttyGS0 --port 8888
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+
 $SUDO_CMD rm -f "${STORAGE_MOUNT}/.r36s_link_lock" 2>/dev/null || true
 
 # Flash bootloader partition (partition 2 - Volumn) with custom bootlogo.bmp

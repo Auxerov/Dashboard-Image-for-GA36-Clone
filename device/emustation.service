@@ -1,0 +1,14 @@
+[Unit]
+Description=GA36 Dedicated PC Dashboard Agent
+After=basic.target
+
+[Service]
+Type=simple
+Environment=HOME=/storage
+ExecStartPre=-/bin/bash /storage/pc_link/usb_gadget_setup.sh
+ExecStart=/usr/bin/python3 /storage/pc_link/r36s_agent.py --daemon --dev /dev/ttyGS0 --port 8888
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
