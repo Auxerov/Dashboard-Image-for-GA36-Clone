@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# GA36 Clone / R36S Direct SD Card File Deployer
-# Automatically copies the Dashboard boot hook & agent files to an SD card
+# GA36 Clone / R36S Direct SD Card File Deployer & System Healer
+# Automatically configures instant USB PC Link, early boot services & custom splash
 # ==============================================================================
 
 set -e
@@ -15,7 +15,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}${BOLD}"
 echo "============================================================"
-echo " GA36 Clone SD Card Direct File Deployer"
+echo " GA36 Clone SD Card Direct File Deployer & Healer"
 echo "============================================================"
 echo -e "${NC}"
 
@@ -61,7 +61,7 @@ if [ "$(id -u)" -ne 0 ]; then
     SUDO_CMD="sudo"
 fi
 
-echo -e "${GREEN}[1/3] Copying dashboard files -> ${STORAGE_MOUNT}...${NC}"
+echo -e "${GREEN}[1/4] Copying dashboard files -> ${STORAGE_MOUNT}...${NC}"
 $SUDO_CMD mkdir -p "${STORAGE_MOUNT}/pc_link"
 $SUDO_CMD mkdir -p "${STORAGE_MOUNT}/.config/profile.d"
 $SUDO_CMD mkdir -p "${STORAGE_MOUNT}/.config/system.d"
@@ -70,12 +70,12 @@ $SUDO_CMD mkdir -p "${STORAGE_MOUNT}/.config/splash"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/ga36_agent.py" "${STORAGE_MOUNT}/pc_link/r36s_agent.py"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/usb_gadget_setup.sh" "${STORAGE_MOUNT}/pc_link/usb_gadget_setup.sh"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/90-pc_link.conf" "${STORAGE_MOUNT}/.config/profile.d/90-pc_link.conf"
-$SUDO_CMD cp -vf "${OVERLAY_DIR}/storage/.config/splash/"* "${STORAGE_MOUNT}/.config/splash/" 2>/dev/null || true
+$SUDO_CMD cp -vf "${REPO_DIR}/device/custom_start.sh" "${STORAGE_MOUNT}/.config/custom_start.sh"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.png" "${STORAGE_MOUNT}/pc_link/splash.png" 2>/dev/null || true
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/pc_link/splash.raw" 2>/dev/null || true
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/bootlogo.bmp" "${STORAGE_MOUNT}/pc_link/bootlogo.bmp" 2>/dev/null || true
 
-# Also copy splash to all game loading screens
+# Copy splash to all game loading and system splash screens
 for target in "${STORAGE_MOUNT}/.config/splash/loading-game.png" \
               "${STORAGE_MOUNT}/.config/splash/loading-game-std.png" \
               "${STORAGE_MOUNT}/.config/splash/splash-std.png" \
@@ -83,6 +83,21 @@ for target in "${STORAGE_MOUNT}/.config/splash/loading-game.png" \
               "${STORAGE_MOUNT}/.config/splash/retroarch.png"; do
     $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.png" "$target" 2>/dev/null || true
 done
+[ -f "${REPO_DIR}/device/splash/splash.raw" ] && $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/.config/splash/splash.raw" 2>/dev/null || true
+[ -f "${REPO_DIR}/device/splash/splash.raw" ] && $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/.config/splash/splash-1080.raw" 2>/dev/null || true
+
+$SUDO_CMD chmod +x "${STORAGE_MOUNT}/pc_link/"*.py "${STORAGE_MOUNT}/pc_link/"*.sh "${STORAGE_MOUNT}/.config/custom_start.sh"
+
+echo -e "${GREEN}[2/4] Setting up early-boot Native Systemd Service...${NC}"
+$SUDO_CMD cp -vf "${REPO_DIR}/device/ga36-link.service" "${STORAGE_MOUNT}/.config/system.d/ga36-link.service"
+$SUDO_CMD mkdir -p "${STORAGE_MOUNT}/.config/system.d/basic.target.wants"
+$SUDO_CMD ln -sf ../ga36-link.service "${STORAGE_MOUNT}/.config/system.d/basic.target.wants/ga36-link.service" 2>/dev/null || true
+
+echo -e "${GREEN}[3/4] Healing boot dependencies (Unmasking emustation to prevent boot stall)...${NC}"
+# CRITICAL: emustation.service must NOT be masked at filesystem level because emuelec_autostart.sh
+# and emuelec.target depend on it. ga36_dashboard.py stops it on the fly upon PC connection.
+$SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
+$SUDO_CMD rm -f "${STORAGE_MOUNT}/.r36s_link_lock" 2>/dev/null || true
 
 # Flash bootloader partition (partition 2 - Volumn) with custom bootlogo.bmp
 FLASHED_BOOT=0
@@ -117,22 +132,15 @@ if [ "$FLASHED_BOOT" -eq 0 ]; then
     fi
 fi
 
-$SUDO_CMD chmod +x "${STORAGE_MOUNT}/pc_link/"*.py "${STORAGE_MOUNT}/pc_link/"*.sh
-
-echo -e "${GREEN}[2/3] Applying zero-flicker and silent boot masks...${NC}"
-$SUDO_CMD ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
-$SUDO_CMD ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/pulseaudio.service" 2>/dev/null || true
-
-# Remove old lock file if left over so boot hook triggers immediately
-$SUDO_CMD rm -f "${STORAGE_MOUNT}/.r36s_link_lock" 2>/dev/null || true
-
-echo -e "${GREEN}[3/3] Flushing changes to disk (sync)...${NC}"
+echo -e "${GREEN}[4/4] Flushing all filesystem buffers (sync)...${NC}"
 sync
 
 echo ""
 echo -e "${GREEN}${BOLD}============================================================${NC}"
-echo -e "${GREEN}${BOLD} [SUCCESS] GA36 SD Card Configured for Dashboard Mode!${NC}"
+echo -e "${GREEN}${BOLD} [SUCCESS] GA36 SD Card Healed & Configured!${NC}"
 echo -e "${GREEN}${BOLD}============================================================${NC}"
-echo "Safely eject the card, insert it into your console, and power on."
-echo "Then simply run: ./install.sh start"
+echo "1. Safely eject the card from your PC."
+echo "2. Insert it into your console and turn it ON."
+echo "3. Connect the USB cable to the OTG port."
+echo "4. Run: ./install.sh start"
 echo -e "${GREEN}============================================================${NC}"

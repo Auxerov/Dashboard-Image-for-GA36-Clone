@@ -1,0 +1,13 @@
+[Unit]
+Description=GA36 Direct USB Gadget & PC Companion Agent
+After=basic.target
+DefaultDependencies=no
+
+[Service]
+Type=forking
+ExecStart=/bin/bash -c "/bin/bash /storage/pc_link/usb_gadget_setup.sh && /usr/bin/python3 /storage/pc_link/r36s_agent.py --daemon --dev /dev/ttyGS0 --port 8888 &"
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=basic.target
