@@ -70,10 +70,15 @@ $SUDO_CMD mkdir -p "${STORAGE_MOUNT}/.config/splash"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/ga36_agent.py" "${STORAGE_MOUNT}/pc_link/r36s_agent.py"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/usb_gadget_setup.sh" "${STORAGE_MOUNT}/pc_link/usb_gadget_setup.sh"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/90-pc_link.conf" "${STORAGE_MOUNT}/.config/profile.d/90-pc_link.conf"
-$SUDO_CMD cp -vf "${REPO_DIR}/device/custom_start.sh" "${STORAGE_MOUNT}/.config/custom_start.sh"
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.png" "${STORAGE_MOUNT}/pc_link/splash.png" 2>/dev/null || true
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/pc_link/splash.raw" 2>/dev/null || true
 $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/bootlogo.bmp" "${STORAGE_MOUNT}/pc_link/bootlogo.bmp" 2>/dev/null || true
+
+# Clean up any leftover experimental services that broke systemd boot
+$SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/custom_start.sh" 2>/dev/null || true
+$SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/system.d/ga36-link.service" 2>/dev/null || true
+$SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/system.d/basic.target.wants/ga36-link.service" 2>/dev/null || true
+$SUDO_CMD rm -f "${STORAGE_MOUNT}/storage/pc_link/launch_dashboard.sh" 2>/dev/null || true
 
 # Copy splash to all game loading and system splash screens
 for target in "${STORAGE_MOUNT}/.config/splash/loading-game.png" \
@@ -86,17 +91,10 @@ done
 [ -f "${REPO_DIR}/device/splash/splash.raw" ] && $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/.config/splash/splash.raw" 2>/dev/null || true
 [ -f "${REPO_DIR}/device/splash/splash.raw" ] && $SUDO_CMD cp -vf "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/.config/splash/splash-1080.raw" 2>/dev/null || true
 
-$SUDO_CMD chmod +x "${STORAGE_MOUNT}/pc_link/"*.py "${STORAGE_MOUNT}/pc_link/"*.sh "${STORAGE_MOUNT}/.config/custom_start.sh"
+$SUDO_CMD chmod +x "${STORAGE_MOUNT}/pc_link/"*.py "${STORAGE_MOUNT}/pc_link/"*.sh
 
-echo -e "${GREEN}[2/4] Setting up early-boot Native Systemd Service...${NC}"
-$SUDO_CMD cp -vf "${REPO_DIR}/device/ga36-link.service" "${STORAGE_MOUNT}/.config/system.d/ga36-link.service"
-$SUDO_CMD mkdir -p "${STORAGE_MOUNT}/.config/system.d/basic.target.wants"
-$SUDO_CMD ln -sf ../ga36-link.service "${STORAGE_MOUNT}/.config/system.d/basic.target.wants/ga36-link.service" 2>/dev/null || true
-
-echo -e "${GREEN}[3/4] Healing boot dependencies (Unmasking emustation to prevent boot stall)...${NC}"
-# CRITICAL: emustation.service must NOT be masked at filesystem level because emuelec_autostart.sh
-# and emuelec.target depend on it. ga36_dashboard.py stops it on the fly upon PC connection.
-$SUDO_CMD rm -f "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
+echo -e "${GREEN}[2/4] Configuring zero-retro UI (masking EmulationStation)...${NC}"
+$SUDO_CMD ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true
 $SUDO_CMD rm -f "${STORAGE_MOUNT}/.r36s_link_lock" 2>/dev/null || true
 
 # Flash bootloader partition (partition 2 - Volumn) with custom bootlogo.bmp

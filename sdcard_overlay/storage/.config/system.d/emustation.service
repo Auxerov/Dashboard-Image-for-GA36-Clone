@@ -1,14 +1,1 @@
-[Unit]
-Description=GA36 Dedicated Dashboard Display (EmulationStation Bypass)
-After=graphical.target
-Wants=basic.target
-
-[Service]
-Type=simple
-Environment=HOME=/storage
-ExecStart=/bin/bash /storage/pc_link/launch_dashboard.sh
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=emuelec.target
+/dev/null
