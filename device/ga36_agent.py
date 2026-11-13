@@ -169,6 +169,7 @@ class R36SAgent:
         self.fb = MiniFB()
         self.active_connections = set()
         self.last_active_time = time.time()
+        self.has_connected = False
         self.gui_paused = False
 
     def pause_gui(self):
@@ -272,6 +273,7 @@ class R36SAgent:
     def handle_request(self, msg_str, reply_callback=None):
         reply_func = reply_callback or self.send_serial_response
         self.last_active_time = time.time()
+        self.has_connected = True
         try:
             req = json.loads(msg_str)
         except Exception as e:
@@ -470,9 +472,21 @@ class R36SAgent:
             subprocess.run("systemctl poweroff || poweroff", shell=True)
 
     def run_power_sync_watchdog(self):
-        """Monitors system health and power state without unintended reboots or shutdowns."""
+        """Monitors system health and syncs power state with PC (shuts down when PC turns off)."""
         while self.running:
-            time.sleep(10.0)
+            time.sleep(2.0)
+            if self.has_connected:
+                # If host has disconnected for > 8 seconds, PC has shut down or suspended
+                no_serial = (self.ser_file is None or getattr(self.ser_file, "closed", True))
+                no_tcp = (len(self.active_connections) == 0)
+                if no_serial and no_tcp and (time.time() - self.last_active_time > 8.0):
+                    print("[POWER_SYNC] PC disconnected for > 8s. Shutting down console to sync with PC...")
+                    try:
+                        self.fb.clear(0, 0, 0)
+                    except Exception:
+                        pass
+                    subprocess.run("systemctl poweroff || poweroff -f", shell=True)
+                    break
 
     def run_serial_loop(self):
         """Persistent serial loop: keeps port open and dispatches requests to thread pool."""
