@@ -31,7 +31,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSION = "3.2"
+VERSION = "3.3"
 SERIAL_DEV = "/dev/ttyGS0"
 
 
@@ -549,7 +549,7 @@ class R36SAgent:
     def run_gamepad_listener(self):
         """Monitors all /dev/input/event* devices simultaneously for button presses."""
         BUTTON_MAP = {
-            # Standard Gamepad
+            # Standard Gamepad (micro_gamepad)
             304: "A",
             305: "B",
             307: "X",
@@ -563,19 +563,26 @@ class R36SAgent:
             316: "MODE",
             317: "L3",
             318: "R3",
-            # D-pad keys
+            # GA36 Clone D-Pad Keys (micro_gamepad EV_KEY)
+            544: "DPAD_UP",
+            545: "DPAD_DOWN",
+            546: "DPAD_LEFT",
+            547: "DPAD_RIGHT",
+            # Standard / Extended D-pad keys
             16: "DPAD_DOWN",
             17: "DPAD_UP",
+            103: "DPAD_UP",
             105: "DPAD_LEFT",
             106: "DPAD_RIGHT",
-            # Keyboard / system buttons
+            108: "DPAD_DOWN",
+            # Center function & system buttons
             28: "ENTER",
             102: "HOME",
             114: "VOL_DOWN",
             115: "VOL_UP",
             116: "POWER",
             139: "MENU",
-            464: "UDT_KEY",
+            464: "FN",       # UDT center FN / Menu button
             # Generic Joystick buttons
             0: "BTN_0",
             1: "BTN_1",
@@ -624,24 +631,30 @@ class R36SAgent:
                                         btn_name = BUTTON_MAP.get(code, f"KEY_{code}")
                                         self.broadcast_message({"type": "button", "name": btn_name, "code": code})
                                     elif ev_type == 3:
-                                        # Analog / Hat D-pad axes
-                                        if code in (0, 16):
-                                            if val < -1000 and last_abs_x >= 0:
+                                        # Analog / Hat D-pad axes (GA36 sticks: 0..18, center 9; Standard: -32768..32767)
+                                        if code in (0, 16):  # X-Axis
+                                            is_left = (val <= 3) or (val < -1000)
+                                            is_right = (val >= 15) or (val > 1000)
+                                            is_center = (6 <= val <= 12) or (abs(val) <= 1000)
+                                            if is_left and last_abs_x >= 0:
                                                 last_abs_x = -1
-                                                self.broadcast_message({"type": "button", "name": "DPAD_LEFT", "code": 105})
-                                            elif val > 1000 and last_abs_x <= 0:
+                                                self.broadcast_message({"type": "button", "name": "DPAD_LEFT", "code": 546})
+                                            elif is_right and last_abs_x <= 0:
                                                 last_abs_x = 1
-                                                self.broadcast_message({"type": "button", "name": "DPAD_RIGHT", "code": 106})
-                                            elif abs(val) <= 1000:
+                                                self.broadcast_message({"type": "button", "name": "DPAD_RIGHT", "code": 547})
+                                            elif is_center:
                                                 last_abs_x = 0
-                                        elif code in (1, 17):
-                                            if val < -1000 and last_abs_y >= 0:
+                                        elif code in (1, 17):  # Y-Axis
+                                            is_up = (val <= 3) or (val < -1000)
+                                            is_down = (val >= 15) or (val > 1000)
+                                            is_center = (6 <= val <= 12) or (abs(val) <= 1000)
+                                            if is_up and last_abs_y >= 0:
                                                 last_abs_y = -1
-                                                self.broadcast_message({"type": "button", "name": "DPAD_UP", "code": 17})
-                                            elif val > 1000 and last_abs_y <= 0:
+                                                self.broadcast_message({"type": "button", "name": "DPAD_UP", "code": 544})
+                                            elif is_down and last_abs_y <= 0:
                                                 last_abs_y = 1
-                                                self.broadcast_message({"type": "button", "name": "DPAD_DOWN", "code": 16})
-                                            elif abs(val) <= 1000:
+                                                self.broadcast_message({"type": "button", "name": "DPAD_DOWN", "code": 545})
+                                            elif is_center:
                                                 last_abs_y = 0
                         except Exception:
                             pass

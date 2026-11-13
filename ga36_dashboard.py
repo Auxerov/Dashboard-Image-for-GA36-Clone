@@ -29,7 +29,8 @@ import threading
 import subprocess
 import psutil
 import serial
-from PIL import Image, ImageDraw, ImageFont
+import shutil
+from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 try:
     import dbus
@@ -288,10 +289,14 @@ class R36SClient:
                 pass
         self.ser = None
         self.pending_responses.clear()
+        if shutil.which("usbreset"):
+            subprocess.run(["sudo", "-n", "usbreset", "18d1:0001"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.8)
         return self.connect(timeout=timeout)
 
     def connect(self, timeout=30):
         start = time.time()
+        retried_reset = False
         while self.running and (timeout is None or (time.time() - start < timeout)):
             # 1. Try Serial
             p = self.find_port()
@@ -307,8 +312,17 @@ class R36SClient:
                     self.port = p
                     self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
                     self.reader_thread.start()
-                    print(f"\n[CONNECTED] GA36 Serial Port: {self.port}")
-                    return True
+                    # Quick check if device responds
+                    res = self.ping()
+                    if res.get("status") == "ok":
+                        print(f"\n[CONNECTED] GA36 Serial Port: {self.port}")
+                        return True
+                    else:
+                        if not retried_reset and shutil.which("usbreset"):
+                            retried_reset = True
+                            subprocess.run(["sudo", "-n", "usbreset", "18d1:0001"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            time.sleep(1.0)
+                            continue
                 except Exception:
                     pass
 
@@ -854,8 +868,8 @@ def mode_test(client):
         print(f" Battery      : %{p.get('capacity')} ({p.get('status')}) - {p.get('voltage_v')}V")
         print("=" * 55)
 
-        if res.get("version") != "3.2":
-            print("\n[AUTO-UPDATE] Upgrading Agent to v3.2...")
+        if res.get("version") != "3.3":
+            print("\n[AUTO-UPDATE] Upgrading Agent to v3.3...")
             mode_update_agent(client)
 
         print("\nAvailable Commands:")
@@ -913,18 +927,219 @@ def mode_image(client, image_path):
         print(f"\n[ERROR] Image processing error: {e}")
 
 
+# -------------------------------------------------------------
+# Gallery & Animated GIF Viewer Engine
+# -------------------------------------------------------------
+GALLERY_DIR = os.path.expanduser("~/Pictures/GA36_Gallery")
+VALID_MEDIA_EXTS = (".gif", ".png", ".jpg", ".jpeg", ".bmp", ".webp")
+THEMES = ["pie", "dual", "btop", "gallery"]
 THEME_FILE = os.path.expanduser("~/.config/ga36/theme")
+
+
+class AnimatedGifMedia:
+    def __init__(self, path):
+        self.path = path
+        self.frames = []
+        self.delays = []
+        self.frame_idx = 0
+        self.last_advance = time.time()
+        self._load()
+
+    def _load(self):
+        try:
+            im = Image.open(self.path)
+            resample = getattr(Image, 'Resampling', Image).LANCZOS
+            for frame in ImageSequence.Iterator(im):
+                f_rgba = frame.convert("RGBA")
+                canvas = Image.new("RGBA", (640, 480), (0, 0, 0, 255))
+                w, h = f_rgba.size
+                scale = min(640 / w, 480 / h)
+                new_w = max(1, int(w * scale))
+                new_h = max(1, int(h * scale))
+                resized = f_rgba.resize((new_w, new_h), resample)
+                canvas.paste(resized, ((640 - new_w) // 2, (480 - new_h) // 2), resized)
+                self.frames.append(canvas)
+                dur = frame.info.get("duration", 80)
+                if dur < 25:
+                    dur = 80
+                self.delays.append(dur / 1000.0)
+        except Exception as e:
+            print(f"[GIF LOAD ERROR] {self.path}: {e}")
+
+        if not self.frames:
+            self.frames = [Image.new("RGBA", (640, 480), (0, 0, 0, 255))]
+            self.delays = [0.1]
+
+    def get_current_image(self):
+        now = time.time()
+        delay = self.delays[self.frame_idx]
+        if now - self.last_advance >= delay:
+            self.frame_idx = (self.frame_idx + 1) % len(self.frames)
+            self.last_advance = now
+        return self.frames[self.frame_idx], self.delays[self.frame_idx]
+
+
+class StaticImageMedia:
+    def __init__(self, path):
+        self.path = path
+        self.image = None
+        self._load()
+
+    def _load(self):
+        try:
+            im = Image.open(self.path).convert("RGBA")
+            canvas = Image.new("RGBA", (640, 480), (0, 0, 0, 255))
+            w, h = im.size
+            scale = min(640 / w, 480 / h)
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            resample = getattr(Image, 'Resampling', Image).LANCZOS
+            resized = im.resize((new_w, new_h), resample)
+            canvas.paste(resized, ((640 - new_w) // 2, (480 - new_h) // 2), resized)
+            self.image = canvas
+        except Exception as e:
+            print(f"[IMAGE LOAD ERROR] {self.path}: {e}")
+            self.image = Image.new("RGBA", (640, 480), (0, 0, 0, 255))
+
+    def get_current_image(self):
+        return self.image, 0.35
+
+
+class GalleryManager:
+    def __init__(self, gallery_dir=GALLERY_DIR):
+        self.gallery_dir = gallery_dir
+        self.files = []
+        self.current_idx = 0
+        self.loaded_item = None
+        self.osd_text = ""
+        self.osd_until = 0.0
+        self._ensure_gallery_dir()
+        self.rescan()
+
+    def _ensure_gallery_dir(self):
+        try:
+            os.makedirs(self.gallery_dir, exist_ok=True)
+            # Copy sample assets if empty
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            sample_dir = os.path.join(base_dir, "gallery")
+            if os.path.exists(sample_dir):
+                existing = [f for f in os.listdir(self.gallery_dir) if f.lower().endswith(VALID_MEDIA_EXTS)]
+                if not existing:
+                    for s in os.listdir(sample_dir):
+                        if s.lower().endswith(VALID_MEDIA_EXTS):
+                            shutil.copy2(os.path.join(sample_dir, s), os.path.join(self.gallery_dir, s))
+        except Exception:
+            pass
+
+    def rescan(self):
+        self._ensure_gallery_dir()
+        try:
+            if os.path.exists(self.gallery_dir):
+                self.files = sorted([
+                    f for f in os.listdir(self.gallery_dir)
+                    if f.lower().endswith(VALID_MEDIA_EXTS) and not f.startswith(".")
+                ])
+            else:
+                self.files = []
+        except Exception:
+            self.files = []
+
+        if self.files:
+            self.current_idx = self.current_idx % len(self.files)
+            self._load_current()
+        else:
+            self.loaded_item = None
+
+    @property
+    def total_count(self):
+        return len(self.files)
+
+    @property
+    def current_filename(self):
+        if self.files and 0 <= self.current_idx < len(self.files):
+            return self.files[self.current_idx]
+        return "None"
+
+    def next_item(self):
+        self.rescan()
+        if not self.files:
+            return
+        self.current_idx = (self.current_idx + 1) % len(self.files)
+        self._load_current()
+        self.trigger_osd()
+
+    def prev_item(self):
+        self.rescan()
+        if not self.files:
+            return
+        self.current_idx = (self.current_idx - 1) % len(self.files)
+        self._load_current()
+        self.trigger_osd()
+
+    def trigger_osd(self):
+        if self.files:
+            self.osd_text = f"[{self.current_idx + 1}/{len(self.files)}] {self.current_filename}"
+            self.osd_until = time.time() + 2.5
+
+    def _load_current(self):
+        if not self.files:
+            self.loaded_item = None
+            return
+        path = os.path.join(self.gallery_dir, self.files[self.current_idx])
+        if path.lower().endswith(".gif"):
+            self.loaded_item = AnimatedGifMedia(path)
+        else:
+            self.loaded_item = StaticImageMedia(path)
+
+
+def render_gallery_frame(gallery_mgr):
+    if not gallery_mgr.loaded_item or not gallery_mgr.files:
+        img = Image.new("RGBA", (640, 480), (10, 15, 25, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((320, 180), "⚡ GA36 GALLERY MODE", fill=(0, 229, 255), anchor="mm", font=FONT_TITLE)
+        draw.text((320, 240), "No images or GIFs found in:", fill=(240, 245, 255), anchor="mm", font=FONT_REG)
+        draw.text((320, 270), "~/Pictures/GA36_Gallery", fill=(255, 145, 0), anchor="mm", font=FONT_BOLD)
+        draw.text((320, 330), "Drop .gif, .png, .jpg files into this folder", fill=(120, 135, 160), anchor="mm", font=FONT_REG)
+        draw.text((320, 360), "Press D-Pad [Left/Right] on console to browse", fill=(120, 135, 160), anchor="mm", font=FONT_SMALL)
+        r, g, b, a = img.split()
+        bgra = Image.merge("RGBA", (b, g, r, a))
+        return zlib.compress(bgra.tobytes(), level=1), 0.5
+
+    base_img, delay = gallery_mgr.loaded_item.get_current_image()
+
+    if time.time() < gallery_mgr.osd_until:
+        display_img = base_img.copy()
+        draw = ImageDraw.Draw(display_img)
+        badge_text = gallery_mgr.osd_text
+        bbox = draw.textbbox((320, 445), badge_text, anchor="mm", font=FONT_BOLD)
+        pad_x, pad_y = 16, 6
+        draw.rounded_rectangle(
+            [bbox[0] - pad_x, bbox[1] - pad_y, bbox[2] + pad_x, bbox[3] + pad_y],
+            radius=8,
+            fill=(10, 15, 25, 225),
+            outline=(0, 229, 255, 255),
+            width=1
+        )
+        draw.text((320, 445), badge_text, fill=(240, 255, 255), anchor="mm", font=FONT_BOLD)
+    else:
+        display_img = base_img
+
+    r, g, b, a = display_img.split()
+    bgra = Image.merge("RGBA", (b, g, r, a))
+    return zlib.compress(bgra.tobytes(), level=1), delay
+
 
 def get_saved_theme():
     try:
         if os.path.exists(THEME_FILE):
             with open(THEME_FILE, "r") as f:
                 t = f.read().strip().lower()
-                if t in ("pie", "dual", "btop"):
+                if t in THEMES:
                     return t
     except Exception:
         pass
     return "pie"
+
 
 def save_active_theme(theme_name):
     try:
@@ -936,44 +1151,77 @@ def save_active_theme(theme_name):
 
 
 def mode_dashboard(client, theme=None):
-    if theme and theme.lower() in ("pie", "dual", "btop"):
+    if theme and theme.lower() in THEMES:
         current_theme = theme.lower()
         save_active_theme(current_theme)
     else:
         current_theme = get_saved_theme()
 
     print("\n" + "=" * 60)
-    print(" GA36 / R36S CYBER HARDWARE HUD ACTIVE!")
-    print(f" Active Theme: {current_theme.upper()}")
-    print(" Streaming real-time metrics to console display.")
+    print(" GA36 / R36S CYBER HARDWARE & MEDIA HUD ACTIVE!")
+    print(f" Active Mode: {current_theme.upper()}")
     print(" Physical Gamepad Controls:")
     print("   [ A ]           -> Media Play / Pause")
     print("   [ B ]           -> Next Track")
     print("   [ X ]           -> Toggle Microphone Mute")
     print("   [ Y ]           -> Capture Screenshot")
-    print("   [ SELECT/MODE ] -> Cycle Theme (PIE ➔ DUAL ➔ BTOP)")
-    print("   [ DPAD LEFT/RIGHT ] -> Switch Themes")
+    print("   [ SELECT/MODE/FN ] -> Cycle Mode (PIE ➔ DUAL ➔ BTOP ➔ GALLERY)")
+    print("   [ DPAD LEFT/RIGHT] -> Switch Mode (or Prev/Next Image in Gallery)")
     print(" Press Ctrl+C in terminal to exit.")
     print("=" * 60 + "\n")
 
     print("[INFO] Pausing EmulationStation to prevent flicker...")
     client.pause_gui()
 
+    gallery_mgr = GalleryManager()
+
     def handle_btn(btn_name):
         nonlocal current_theme
         btn_upper = str(btn_name).upper()
-        # Mode switching buttons: SELECT, MODE, MENU, START, DPAD, L1, R1
-        if btn_upper in ("SELECT", "MODE", "MENU", "START", "KEY_314", "KEY_315", "KEY_316", "KEY_139", "KEY_296", "KEY_297", "L1", "R1", "KEY_310", "KEY_311", "DPAD_RIGHT", "DPAD_LEFT", "KEY_105", "KEY_106"):
-            themes = ["pie", "dual", "btop"]
-            if btn_upper in ("DPAD_LEFT", "L1", "KEY_310", "KEY_105"):
-                idx = (themes.index(current_theme) - 1) % len(themes)
+
+        is_theme_cycle = btn_upper in (
+            "SELECT", "MODE", "MENU", "START", "FN",
+            "KEY_314", "KEY_315", "KEY_316", "KEY_464", "KEY_139", "KEY_296", "KEY_297"
+        )
+        is_left = btn_upper in ("DPAD_LEFT", "KEY_546", "KEY_105")
+        is_right = btn_upper in ("DPAD_RIGHT", "KEY_547", "KEY_106")
+        is_up = btn_upper in ("DPAD_UP", "KEY_544", "KEY_17", "KEY_103")
+        is_down = btn_upper in ("DPAD_DOWN", "KEY_545", "KEY_16", "KEY_108")
+        is_l1 = btn_upper in ("L1", "KEY_310")
+        is_r1 = btn_upper in ("R1", "KEY_311")
+
+        if current_theme == "gallery":
+            if is_right or is_down or is_r1:
+                gallery_mgr.next_item()
+                print(f"\n[GALLERY NEXT] {gallery_mgr.current_filename} ({gallery_mgr.current_idx + 1}/{gallery_mgr.total_count})")
+            elif is_left or is_up or is_l1:
+                gallery_mgr.prev_item()
+                print(f"\n[GALLERY PREV] {gallery_mgr.current_filename} ({gallery_mgr.current_idx + 1}/{gallery_mgr.total_count})")
+            elif is_theme_cycle:
+                idx = (THEMES.index(current_theme) + 1) % len(THEMES)
+                current_theme = THEMES[idx]
+                save_active_theme(current_theme)
+                print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
             else:
-                idx = (themes.index(current_theme) + 1) % len(themes)
-            current_theme = themes[idx]
-            save_active_theme(current_theme)
-            print(f"\n[THEME CHANGED] New HUD Mode: {current_theme.upper()}    ")
+                client.default_button_action(btn_name)
         else:
-            client.default_button_action(btn_name)
+            if is_theme_cycle or is_r1:
+                idx = (THEMES.index(current_theme) + 1) % len(THEMES)
+                current_theme = THEMES[idx]
+                save_active_theme(current_theme)
+                print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
+            elif is_l1:
+                idx = (THEMES.index(current_theme) - 1) % len(THEMES)
+                current_theme = THEMES[idx]
+                save_active_theme(current_theme)
+                print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
+            elif is_left or is_right:
+                idx = (THEMES.index(current_theme) + (1 if is_right else -1)) % len(THEMES)
+                current_theme = THEMES[idx]
+                save_active_theme(current_theme)
+                print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
+            else:
+                client.default_button_action(btn_name)
 
     client.button_callback = handle_btn
 
@@ -1010,23 +1258,32 @@ def mode_dashboard(client, theme=None):
             saved_theme = get_saved_theme()
             if saved_theme != current_theme:
                 current_theme = saved_theme
-                print(f"\n[THEME UPDATED] New HUD Mode: {current_theme.upper()}    ")
+                if current_theme == "gallery":
+                    gallery_mgr.rescan()
+                    gallery_mgr.trigger_osd()
+                print(f"\n[THEME UPDATED] New Mode: {current_theme.upper()}    ")
 
-            # Gather host metrics
-            cpu = get_cpu_info()
-            gpu = get_gpu_info()
-            ram = get_ram_info()
-            net = get_net_info()
-            disk = get_disk_info()
-            media = get_media_info()
+            # Gather host metrics only for HUD modes
+            if current_theme != "gallery":
+                cpu = get_cpu_info()
+                gpu = get_gpu_info()
+                ram = get_ram_info()
+                net = get_net_info()
+                disk = get_disk_info()
+                media = get_media_info()
 
             # Render selected theme
-            if current_theme == "dual":
+            if current_theme == "gallery":
+                comp_frame, delay_sec = render_gallery_frame(gallery_mgr)
+            elif current_theme == "dual":
                 comp_frame = render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info)
+                delay_sec = 0.40
             elif current_theme == "btop":
                 comp_frame = render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info)
+                delay_sec = 0.40
             else:
                 comp_frame = render_pie_dashboard(cpu, gpu, ram, net, disk, media, power_info)
+                delay_sec = 0.40
 
             # Send to R36S screen
             res = client.display_frame_raw(comp_frame)
@@ -1042,10 +1299,15 @@ def mode_dashboard(client, theme=None):
 
             theme_label = current_theme.upper()
             clock_now = time.strftime("%H:%M:%S")
-            print(f"\r[{theme_label} HUD] {clock_now} | CPU: %{cpu['usage']:02d} ({cpu['temp']}°C) | GPU: %{gpu['usage']:02d} ({gpu['temp']}°C) | RAM: %{ram['usage']:02d} | Net: {net['down_str']} | FPS: {fps} ", end="", flush=True)
+            if current_theme == "gallery":
+                cur_name = gallery_mgr.current_filename
+                idx_str = f"[{gallery_mgr.current_idx + 1}/{gallery_mgr.total_count}]" if gallery_mgr.total_count else "[0/0]"
+                print(f"\r[{theme_label}] {clock_now} | {idx_str} {cur_name:<28} | FPS: {fps} ", end="", flush=True)
+            else:
+                print(f"\r[{theme_label} HUD] {clock_now} | CPU: %{cpu['usage']:02d} ({cpu['temp']}°C) | GPU: %{gpu['usage']:02d} ({gpu['temp']}°C) | RAM: %{ram['usage']:02d} | Net: {net['down_str']} | FPS: {fps} ", end="", flush=True)
 
             dt = time.time() - t0
-            time.sleep(max(0.05, 0.40 - dt))  # ~2.5 FPS Ultra Eco-Smooth (R36S CPU < %1.5, low CPU load, cool & battery efficient)
+            time.sleep(max(0.02, delay_sec - dt))
 
     except KeyboardInterrupt:
         print("\n\nLive hardware monitor stopped.")
@@ -1138,9 +1400,9 @@ def mode_poweroff(client):
 # Main Entry Point
 # -------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="GA36 / R36S Live Sync & Control Suite v3.2")
+    parser = argparse.ArgumentParser(description="GA36 / R36S Live Sync & Control Suite v3.3")
     parser.add_argument("command", nargs="?", default="test",
-                        choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "mode", "theme", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
+                        choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "mode", "theme", "gallery", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
                         help="Operating mode")
     parser.add_argument("args", nargs="*", help="Command arguments")
     parser.add_argument("--port", "-p", default=None, help="Serial port (e.g. /dev/ttyACM0)")
@@ -1151,7 +1413,7 @@ def main():
 
     # Instant Mode/Theme Switcher (does not require locking serial port)
     if cmd in ("mode", "theme"):
-        themes = ["pie", "dual", "btop"]
+        themes = ["pie", "dual", "btop", "gallery"]
         cur = get_saved_theme()
         if parsed.args:
             target = parsed.args[0].lower().strip()
@@ -1163,8 +1425,40 @@ def main():
             target = themes[idx]
         save_active_theme(target)
         print("\n" + "=" * 60)
-        print(f" [SUCCESS] HUD Mode Updated: {target.upper()} (Previous: {cur.upper()})")
+        print(f" [SUCCESS] Mode Updated: {target.upper()} (Previous: {cur.upper()})")
         print(" The screen display will update immediately.")
+        print("=" * 60 + "\n")
+        sys.exit(0)
+
+    # Gallery Helper & File Lister
+    if cmd == "gallery":
+        gallery_dir = os.path.expanduser("~/Pictures/GA36_Gallery")
+        os.makedirs(gallery_dir, exist_ok=True)
+        # Ensure sample assets are present
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        sample_dir = os.path.join(base_dir, "gallery")
+        if os.path.exists(sample_dir):
+            for s in os.listdir(sample_dir):
+                if s.lower().endswith(VALID_MEDIA_EXTS):
+                    dst = os.path.join(gallery_dir, s)
+                    if not os.path.exists(dst):
+                        shutil.copy2(os.path.join(sample_dir, s), dst)
+
+        files = sorted([f for f in os.listdir(gallery_dir) if f.lower().endswith(VALID_MEDIA_EXTS)])
+        print("\n" + "=" * 60)
+        print(" 🎨 GA36 Media & Animated GIF Gallery")
+        print("=" * 60)
+        print(f" Directory: {gallery_dir}")
+        print(f" Total Items: {len(files)}")
+        for idx, f in enumerate(files, 1):
+            is_gif = " [GIF]" if f.lower().endswith(".gif") else " [IMAGE]"
+            print(f"   {idx}. {f}{is_gif}")
+        print("\n Controls on Console (in GALLERY Mode):")
+        print("   [ DPAD LEFT / UP ]    -> Previous image or animated GIF")
+        print("   [ DPAD RIGHT / DOWN ] -> Next image or animated GIF")
+        print("   [ SELECT / MODE / FN ]-> Switch back to Hardware HUD (PIE)")
+        print("\n Switch to Gallery mode instantly:")
+        print("   ./install.sh mode gallery")
         print("=" * 60 + "\n")
         sys.exit(0)
 
@@ -1197,7 +1491,7 @@ def main():
             mode_shell(client)
         elif cmd == "exec":
             if not parsed.args:
-                print("\nKullanım: ./r36s.sh exec \"<komut>\"")
+                print("\nUsage: ./install.sh exec \"<command>\"")
             else:
                 mode_exec(client, " ".join(parsed.args))
         elif cmd == "ls":
@@ -1207,7 +1501,7 @@ def main():
                 print(f"\n{path} directory listing:")
                 for e in res.get("entries", []):
                     prefix = "📁 [DIR] " if e.get("is_dir") else "📄 [FILE]"
-                    print(f"  {prefix} {e.get('name'):<30} {e.get('size'):>10} bayt")
+                    print(f"  {prefix} {e.get('name'):<30} {e.get('size'):>10} bytes")
             else:
                 print(f"[ERROR] {res.get('msg')}")
         elif cmd == "push":

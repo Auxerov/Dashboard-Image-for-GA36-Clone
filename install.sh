@@ -229,6 +229,10 @@ cmd_mode() {
     python3 "$PYTHON_SCRIPT" mode "$@"
 }
 
+cmd_gallery() {
+    python3 "$PYTHON_SCRIPT" gallery "$@"
+}
+
 cmd_restore() {
     systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
     python3 "$PYTHON_SCRIPT" restore
@@ -295,6 +299,9 @@ case "$ACTION" in
     mode|theme)
         cmd_mode "$@"
         ;;
+    gallery|gif|art)
+        cmd_gallery "$@"
+        ;;
     backup)
         sudo "${REPO_DIR}/scripts/backup_image.sh" "$@"
         ;;
@@ -313,7 +320,8 @@ case "$ACTION" in
         echo "  status         -> Check service and USB connection status"
         echo "  logs           -> Follow live system logs"
         echo "  dashboard      -> Open interactive terminal dashboard & controls"
-        echo "  mode [theme]   -> Switch HUD theme (pie, dual, btop or next)"
+        echo "  mode [theme]   -> Switch HUD mode (pie, dual, btop, gallery or next)"
+        echo "  gallery        -> Manage & list media files in ~/Pictures/GA36_Gallery"
         echo "  image <file>   -> Push custom image / wallpaper to console screen"
         echo "  battery        -> Display battery and power status"
         echo "  shell          -> Open interactive root shell on console"

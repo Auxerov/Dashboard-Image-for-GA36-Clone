@@ -21,6 +21,7 @@
 ## ✨ Features
 
 - **Giant 4-Dial Ring HUD (640x480 Fullscreen):** High-contrast circular meters for CPU, GPU, RAM, and Network (Download/Upload) with large, crisp readouts visible across the desk.
+- **Animated GIF & Image Gallery Mode:** Stream smooth animated GIFs and static wallpapers directly to your console screen with real-time frame looping and aspect ratio preservation. Save your favorites to `~/Pictures/GA36_Gallery` and browse using the console D-Pad!
 - **Zero-Flicker & Direct Framebuffer Boot:** EmulationStation is masked out and the Linux hardware framebuffer (`/dev/fb0`) is allocated directly to the PC companion stream. No UI stutter, no screen flashing, and no audio crackle.
 - **Silent & Clean (Zero Audio Overhead):** Pulseaudio and all background sound daemons are completely disabled and masked; audio files have been stripped for maximum power efficiency and zero speaker hiss.
 - **Physical Gamepad Controls:**
@@ -28,8 +29,10 @@
   - `[ B ]`: Next Track
   - `[ X ]`: Toggle PC Microphone Mute (via WirePlumber / wpctl)
   - `[ Y ]`: Capture PC Screenshot (Spectacle / custom tool)
-  - `[ SELECT / MODE / START ]`: Cycle HUD Themes (`PIE` ➔ `DUAL` ➔ `BTOP`)
-  - `[ DPAD LEFT / RIGHT ]` or `[ L1 / R1 ]`: Instant theme navigation
+  - `[ SELECT / MODE / START / FN ]`: Cycle HUD Themes (`PIE` ➔ `DUAL` ➔ `BTOP` ➔ `GALLERY`)
+  - `[ DPAD LEFT / UP ]`: Previous image or animated GIF in Gallery mode
+  - `[ DPAD RIGHT / DOWN ]`: Next image or animated GIF in Gallery mode
+  - `[ L1 / R1 ]`: Quick HUD theme toggle
 - **Smart Power & Eco Mode (~2.5 FPS):** Console CPU runs below 1.5% load, remains completely cool, and automatically charges from the host computer's USB-C port.
 - **Host PC Power Synchronization:** When your computer boots, the console wakes and shows the dashboard. When the computer shuts down, the console automatically powers off cleanly.
 - **100% Reversible:** Restore the original gaming menu and stock settings at any time with a single command (`./install.sh restore`).
@@ -54,7 +57,8 @@ The `install.sh` script manages both setup and all operational commands:
 | :--- | :--- |
 | `./install.sh` | Installs dependencies, sets up udev rules, and starts the service |
 | `./install.sh status` | Checks service status and USB connectivity |
-| `./install.sh mode [pie\|dual\|btop]` | Switches HUD mode/theme on-the-fly (live update without restart) |
+| `./install.sh mode [pie\|dual\|btop\|gallery]` | Switches HUD mode/theme on-the-fly (live update without restart) |
+| `./install.sh gallery` | Opens or displays information about `~/Pictures/GA36_Gallery` |
 | `./install.sh dashboard` | Opens an interactive terminal monitor and live HUD switcher |
 | `./install.sh stop` | Pauses the display stream |
 | `./install.sh start` | Resumes the display stream |
