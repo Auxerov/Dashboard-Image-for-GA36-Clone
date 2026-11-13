@@ -46,8 +46,30 @@ echo -e "${GREEN}[1/3] Copying dashboard files -> ${STORAGE_MOUNT}...${NC}"
 mkdir -p "${STORAGE_MOUNT}/pc_link"
 mkdir -p "${STORAGE_MOUNT}/.config/profile.d"
 mkdir -p "${STORAGE_MOUNT}/.config/system.d"
+mkdir -p "${STORAGE_MOUNT}/.config/splash"
 
 cp -v "${OVERLAY_DIR}/storage/pc_link/r36s_agent.py" "${STORAGE_MOUNT}/pc_link/"
+cp -v "${OVERLAY_DIR}/storage/pc_link/usb_gadget_setup.sh" "${STORAGE_MOUNT}/pc_link/"
+cp -v "${OVERLAY_DIR}/storage/.config/profile.d/90-pc_link.conf" "${STORAGE_MOUNT}/.config/profile.d/"
+cp -v "${OVERLAY_DIR}/storage/.config/splash/"* "${STORAGE_MOUNT}/.config/splash/" 2>/dev/null || true
+cp -v "${REPO_DIR}/device/splash/splash.png" "${STORAGE_MOUNT}/pc_link/splash.png" 2>/dev/null || true
+cp -v "${REPO_DIR}/device/splash/splash.raw" "${STORAGE_MOUNT}/pc_link/splash.raw" 2>/dev/null || true
+cp -v "${REPO_DIR}/device/splash/bootlogo.bmp" "${STORAGE_MOUNT}/pc_link/bootlogo.bmp" 2>/dev/null || true
+
+# Look for Volumn / boot partition (partition 2) and ARKOS partition (partition 7)
+for mount in $(lsblk -n -o MOUNTPOINT 2>/dev/null | grep -v "^$"); do
+    if [ -f "$mount/bootlogo.bmp" ] || [ -d "$mount/bat" ]; then
+        echo -e "${GREEN}[*] Found Boot Partition (Volumn) at ${mount}, flashing bootlogo.bmp...${NC}"
+        cp -v "${REPO_DIR}/device/splash/bootlogo.bmp" "${mount}/bootlogo.bmp"
+        if [ -d "${mount}/bat" ]; then
+            cp -v "${REPO_DIR}/device/splash/bootlogo.bmp" "${mount}/bat/low_pwr.bmp" 2>/dev/null || true
+        fi
+    fi
+    if [ -f "$mount/low_pwr.bmp" ] && [ -f "$mount/SYSTEM" ]; then
+        echo -e "${GREEN}[*] Found ARKOS system partition at ${mount}, flashing low_pwr.bmp...${NC}"
+        cp -v "${REPO_DIR}/device/splash/bootlogo.bmp" "${mount}/low_pwr.bmp"
+    fi
+done
 cp -v "${OVERLAY_DIR}/storage/pc_link/usb_gadget_setup.sh" "${STORAGE_MOUNT}/pc_link/"
 cp -v "${OVERLAY_DIR}/storage/.config/profile.d/90-pc_link.conf" "${STORAGE_MOUNT}/.config/profile.d/"
 ln -sf /dev/null "${STORAGE_MOUNT}/.config/system.d/emustation.service" 2>/dev/null || true

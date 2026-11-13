@@ -310,6 +310,14 @@ case "$ACTION" in
     gallery|gif|art)
         cmd_gallery "$@"
         ;;
+    deploy|splash|update-console)
+        systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+        "${REPO_DIR}/scripts/deploy_to_device.sh"
+        systemctl --user start "$SERVICE_NAME" 2>/dev/null || true
+        ;;
+    flash-sd|flash-splash)
+        "${REPO_DIR}/scripts/flash_sdcard.sh" "$@"
+        ;;
     backup)
         sudo "${REPO_DIR}/scripts/backup_image.sh" "$@"
         ;;
@@ -333,6 +341,8 @@ case "$ACTION" in
         echo "  gallery        -> Manage & list media files in ~/Pictures/GA36_Gallery"
         echo "  image <file>   -> Push custom image / wallpaper to console screen"
         echo "  battery        -> Display battery and power status"
+        echo "  deploy         -> Re-flash bootlogo, splash screens & agent to console via USB"
+        echo "  flash-sd       -> Flash bootlogo and dashboard files directly to mounted SD card"
         echo "  shell          -> Open interactive root shell on console"
         echo "  restore        -> Restore stock gaming menu on console"
         echo "  backup         -> Create .img.xz backup of SD card"
