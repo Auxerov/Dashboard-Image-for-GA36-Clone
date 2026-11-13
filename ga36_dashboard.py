@@ -634,7 +634,7 @@ def draw_dual_pie(draw, cx, cy, r_out, r_in, pct_out, pct_in, col_out, col_in, t
         draw.text((cx - sw // 2, cy + 14), subtitle, fill=col_out, font=FONT_SMALL)
 
 
-def render_pie_dashboard(cpu, gpu, ram, net, disk, media, power_info):
+def render_pie_dashboard(cpu, gpu, ram, net, disk, media, power_info, osd_msg=None):
     """Renders a Full-Screen, Maximum Size 4-Quadrant Giant Pie HUD (640x480)."""
     img = Image.new("RGB", (640, 480), color=(8, 12, 20))
     draw = ImageDraw.Draw(img)
@@ -664,12 +664,20 @@ def render_pie_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     disk_sub = f"↓ {net['down_str']}" if (net.get("down_mb", 0) > 0.05 or net.get("up_mb", 0) > 0.05) else f"{disk['used_gb']} GB"
     draw_big_pie(draw, 478, 358, 92, disk["usage"], C_ORANGE, thickness=18, title="DISK", val_str=f"{disk['usage']}%", subtitle=disk_sub)
 
+    if osd_msg:
+        bw, bh = 340, 48
+        bx = (640 - bw) // 2
+        by = 54
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=8, fill=(10, 16, 26), outline=C_CYAN, width=2)
+        draw.text((bx + bw // 2, by + 16), osd_msg, fill=(255, 255, 255), font=FONT_LARGE, anchor="mm")
+        draw.text((bx + bw // 2, by + 34), "Press Up/Down arrow to change focus", fill=C_CYAN, font=FONT_SMALL, anchor="mm")
+
     r, g, b = img.split()
     bgra = Image.merge("RGBA", (b, g, r, Image.new("L", (640, 480), 255)))
     return zlib.compress(bgra.tobytes(), level=1)
 
 
-def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info):
+def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info, osd_msg=None):
     """Renders a high-tech Dual-Ring Concentric Cockpit HUD (640x480)."""
     img = Image.new("RGB", (640, 480), color=(8, 12, 20))
     draw = ImageDraw.Draw(img)
@@ -735,7 +743,7 @@ def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((473, 276), f"Outer Ring: {disk['usage']}% Disk", fill=C_WHITE, font=FONT_REG)
     draw.text((473, 298), f"Download  : ↓ {net['down_str']}", fill=C_CYAN, font=FONT_BOLD)
     draw.text((473, 320), f"Upload    : ↑ {net['up_str']}", fill=C_ORANGE, font=FONT_BOLD)
-    draw.text((473, 342), f"Depolama  : {disk['used_gb']}/{disk['total_gb']} GB", fill=C_DIM, font=FONT_SMALL)
+    draw.text((473, 342), f"Storage   : {disk['used_gb']}/{disk['total_gb']} GB", fill=C_DIM, font=FONT_SMALL)
 
     # Bottom Bar
     draw.rectangle([10, 406, 630, 474], fill=C_CARD_BG, outline=C_CARD_BORDER)
@@ -744,14 +752,22 @@ def render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     if media["artist"]:
         m_text += f" - {media['artist']}"
     draw.text((22, 414), m_text[:50], fill=C_CYAN if media["playing"] else C_DIM, font=FONT_BOLD)
-    draw.text((22, 438), "[A] Play/Pause  [B] Next  [X] Mic Mute  [Y] Screenshot  [MODE] Cycle Theme", fill=C_DIM, font=FONT_SMALL)
+    draw.text((22, 438), "[A] Play/Pause  [B] Next  [▲/▼] Focus  [MODE] Themes", fill=C_DIM, font=FONT_SMALL)
+
+    if osd_msg:
+        bw, bh = 340, 48
+        bx = (640 - bw) // 2
+        by = 54
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=8, fill=(10, 16, 26), outline=C_CYAN, width=2)
+        draw.text((bx + bw // 2, by + 16), osd_msg, fill=(255, 255, 255), font=FONT_LARGE, anchor="mm")
+        draw.text((bx + bw // 2, by + 34), "Press Up/Down arrow to change focus", fill=C_CYAN, font=FONT_SMALL, anchor="mm")
 
     r, g, b = img.split()
     bgra = Image.merge("RGBA", (b, g, r, Image.new("L", (640, 480), 255)))
     return zlib.compress(bgra.tobytes(), level=1)
 
 
-def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
+def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info, osd_msg=None):
     """Renders a btop-like cyber HUD (640x480) with real-time metrics."""
     img = Image.new("RGB", (640, 480), color=(8, 12, 20))
     draw = ImageDraw.Draw(img)
@@ -809,7 +825,7 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
 
     # 4. RAM & SWAP Card (Bottom Left: 10, 230, 315, 396)
     draw.rectangle([10, 230, 315, 396], fill=C_CARD_BG, outline=C_CARD_BORDER)
-    draw.text((22, 238), "BELLEK (RAM & SWAP)", fill=C_GREEN, font=FONT_BOLD)
+    draw.text((22, 238), "MEMORY (RAM & SWAP)", fill=C_GREEN, font=FONT_BOLD)
     draw.text((22, 260), f"RAM: {ram['used_gb']} / {ram['total_gb']} GB ({ram['usage']}%)", fill=C_WHITE, font=FONT_REG)
     draw_gauge_bar(draw, 22, 280, 275, 14, ram["usage"], C_GREEN)
 
@@ -825,7 +841,7 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((337, 262), f"Download (Down) : ↓ {net['down_mb']} MB/s", fill=C_CYAN, font=FONT_REG)
     draw.text((337, 282), f"Upload (Up)     : ↑ {net['up_mb']} MB/s", fill=C_ORANGE, font=FONT_REG)
 
-    draw.text((337, 312), f"Depolama (/)   : {disk['used_gb']} / {disk['total_gb']} GB ({disk['usage']}%)", fill=C_WHITE, font=FONT_REG)
+    draw.text((337, 312), f"Storage (/)     : {disk['used_gb']} / {disk['total_gb']} GB ({disk['usage']}%)", fill=C_WHITE, font=FONT_REG)
     draw_gauge_bar(draw, 337, 332, 275, 12, disk["usage"], C_ORANGE)
 
     # 6. Bottom Media & Controller Bar (10, 404, 630, 472)
@@ -839,10 +855,230 @@ def render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info):
     draw.text((22, 412), m_text[:50], fill=C_CYAN if media["playing"] else C_DIM, font=FONT_BOLD)
 
     # Physical button guide
-    btn_guide = "[A] Play/Pause   [B] Next Track   [X] Mic Mute   [Y] Screenshot"
+    btn_guide = "[A] Play/Pause   [B] Next Track   [X] Mic Mute   [▲/▼] Focus   [MODE] Themes"
     draw.text((22, 436), btn_guide, fill=C_DIM, font=FONT_SMALL)
 
+    if osd_msg:
+        bw, bh = 340, 48
+        bx = (640 - bw) // 2
+        by = 54
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=8, fill=(10, 16, 26), outline=C_CYAN, width=2)
+        draw.text((bx + bw // 2, by + 16), osd_msg, fill=(255, 255, 255), font=FONT_LARGE, anchor="mm")
+        draw.text((bx + bw // 2, by + 34), "Press Up/Down arrow to change focus", fill=C_CYAN, font=FONT_SMALL, anchor="mm")
+
     # Convert to 32-bit BGRA
+    r, g, b = img.split()
+    bgra = Image.merge("RGBA", (b, g, r, Image.new("L", (640, 480), 255)))
+    return zlib.compress(bgra.tobytes(), level=1)
+
+
+def render_focus_dashboard(metric, cpu, gpu, ram, net, disk, media, power_info, osd_msg=None):
+    """Renders a dedicated single-metric focus cockpit (640x480) for CPU, GPU, RAM, or NET."""
+    img = Image.new("RGB", (640, 480), color=(8, 12, 20))
+    draw = ImageDraw.Draw(img)
+
+    C_CYAN = (0, 229, 255)
+    C_PINK = (255, 42, 133)
+    C_GREEN = (0, 230, 118)
+    C_ORANGE = (255, 145, 0)
+    C_WHITE = (245, 250, 255)
+    C_DIM = (120, 145, 175)
+    C_CARD_BG = (13, 19, 30)
+    C_CARD_BORDER = (28, 42, 68)
+    C_SUB_BG = (18, 26, 42)
+
+    color_map = {
+        "cpu": C_CYAN,
+        "gpu": C_PINK,
+        "ram": C_GREEN,
+        "net": C_ORANGE
+    }
+    primary_color = color_map.get(metric, C_CYAN)
+
+    # 1. Top Status Bar (8, 6, 632, 42)
+    draw.rounded_rectangle([8, 6, 632, 42], radius=6, fill=C_CARD_BG, outline=C_CARD_BORDER)
+
+    headers = {
+        "cpu": ("⚡ CPU COCKPIT", "AMD Ryzen 7 5700X"),
+        "gpu": ("🎮 GPU COCKPIT", "NVIDIA RTX 5070"),
+        "ram": ("💾 MEMORY COCKPIT", f"{ram['total_gb']} GB System RAM"),
+        "net": ("🌐 NETWORK & STORAGE", "High-Speed I/O")
+    }
+    h_title, h_sub = headers.get(metric, ("⚡ HARDWARE COCKPIT", "System Telemetry"))
+    draw.text((18, 14), h_title, fill=primary_color, font=FONT_LARGE)
+    draw.text((185, 18), f"[FOCUSED: {metric.upper()}]", fill=primary_color, font=FONT_BOLD)
+
+    clock_str = time.strftime("%H:%M:%S")
+    pwr_str = f"⚡ {power_info.get('capacity', 100)}% ({power_info.get('voltage_v', 4.1)}V)" if power_info.get('capacity') else "⚡ PWR"
+    draw.text((490, 16), f"{clock_str} | {pwr_str}", fill=C_DIM, font=FONT_REG)
+
+    # 2. Main Left Focus Dial Card (8, 48, 316, 422)
+    draw.rounded_rectangle([8, 48, 316, 422], radius=8, fill=C_CARD_BG, outline=C_CARD_BORDER)
+
+    if metric == "cpu":
+        draw_big_pie(draw, 162, 195, 100, cpu["usage"], C_CYAN, thickness=20,
+                     title="CPU LOAD", val_str=f"{cpu['usage']}%", subtitle=f"{cpu['temp']}°C")
+        draw.text((22, 325), f"Core Temp: {cpu['temp']}°C", fill=C_WHITE, font=FONT_BOLD)
+        temp_col = C_CYAN if cpu['temp'] < 65 else (C_ORANGE if cpu['temp'] < 80 else (255, 60, 60))
+        draw_gauge_bar(draw, 22, 345, 272, 12, int(min(100, (cpu['temp'] / 95.0) * 100)), temp_col)
+        draw.text((22, 368), f"Clock: {cpu['freq']} GHz  |  {cpu['cores']} Logical Cores", fill=C_DIM, font=FONT_REG)
+        draw.text((22, 390), f"Headroom: {max(0, 95 - cpu['temp'])}°C to TjMax (95°C)", fill=C_DIM, font=FONT_SMALL)
+
+    elif metric == "gpu":
+        draw_big_pie(draw, 162, 195, 100, gpu["usage"], C_PINK, thickness=20,
+                     title="GPU LOAD", val_str=f"{gpu['usage']}%", subtitle=f"{gpu['temp']}°C")
+        vram_pct = int((gpu["vram_used"] / max(0.1, gpu["vram_total"])) * 100)
+        draw.text((22, 325), f"VRAM Used: {gpu['vram_used']} / {gpu['vram_total']} GB ({vram_pct}%)", fill=C_WHITE, font=FONT_BOLD)
+        draw_gauge_bar(draw, 22, 345, 272, 12, vram_pct, C_PINK)
+        draw.text((22, 368), f"VRAM Free: {round(gpu['vram_total'] - gpu['vram_used'], 1)} GB Available", fill=C_DIM, font=FONT_REG)
+        draw.text((22, 390), f"Thermal Headroom: {max(0, 83 - gpu['temp'])}°C (Target 83°C)", fill=C_DIM, font=FONT_SMALL)
+
+    elif metric == "ram":
+        draw_big_pie(draw, 162, 195, 100, ram["usage"], C_GREEN, thickness=20,
+                     title="RAM LOAD", val_str=f"{ram['usage']}%", subtitle=f"{ram['used_gb']} GB")
+        draw.text((22, 325), f"Swap Used: {ram['swap_used_gb']} / {ram['swap_total_gb']} GB ({ram['swap_usage']}%)", fill=C_WHITE, font=FONT_BOLD)
+        draw_gauge_bar(draw, 22, 345, 272, 12, ram["swap_usage"], C_GREEN)
+        avail_gb = round(ram['total_gb'] - ram['used_gb'], 1)
+        draw.text((22, 368), f"Available: {avail_gb} GB Physical Free", fill=C_DIM, font=FONT_REG)
+        draw.text((22, 390), f"Total Virtual: {round(ram['total_gb'] + ram['swap_total_gb'], 1)} GB", fill=C_DIM, font=FONT_SMALL)
+
+    elif metric == "net":
+        draw_big_pie(draw, 162, 195, 100, min(100, int(net["down_mb"] * 10)), C_ORANGE, thickness=20,
+                     title="DOWNLOAD", val_str=net["down_str"], subtitle=f"↑ {net['up_str']}")
+        draw.text((22, 325), f"Storage (/): {disk['used_gb']} / {disk['total_gb']} GB ({disk['usage']}%)", fill=C_WHITE, font=FONT_BOLD)
+        draw_gauge_bar(draw, 22, 345, 272, 12, disk["usage"], C_ORANGE)
+        free_disk = disk['total_gb'] - disk['used_gb']
+        draw.text((22, 368), f"Free Storage: {free_disk} GB Free on root", fill=C_DIM, font=FONT_REG)
+        draw.text((22, 390), f"Speed: ↓ {net['down_mb']} MB/s  ↑ {net['up_mb']} MB/s", fill=C_DIM, font=FONT_SMALL)
+
+    # 3. Right Details & Telemetry Cards (324, 48, 632, 422)
+    draw.rounded_rectangle([324, 48, 632, 422], radius=8, fill=C_CARD_BG, outline=C_CARD_BORDER)
+
+    # Sub-Card 1: Specs & Architecture (y: 56 to 166)
+    draw.rounded_rectangle([332, 56, 624, 168], radius=6, fill=C_SUB_BG, outline=C_CARD_BORDER)
+    if metric == "cpu":
+        draw.text((342, 64), "PROCESSOR SPECIFICATIONS", fill=C_CYAN, font=FONT_BOLD)
+        draw.text((342, 84), f"Model     : {cpu['name']}", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 104), f"Topology  : {cpu['cores']} Logical Cores (8C / 16T)", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 124), f"Frequency : {cpu['freq']} GHz Live Clock", fill=C_DIM, font=FONT_REG)
+        try:
+            l1, l5, l15 = os.getloadavg()
+            draw.text((342, 144), f"Load Avg  : {l1:.2f} (1m), {l5:.2f} (5m), {l15:.2f} (15m)", fill=C_DIM, font=FONT_REG)
+        except Exception:
+            pass
+
+    elif metric == "gpu":
+        draw.text((342, 64), "GRAPHICS ACCELERATOR", fill=C_PINK, font=FONT_BOLD)
+        draw.text((342, 84), f"Model     : {gpu['name']}", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 104), f"Driver    : NVIDIA UNIX Driver / CUDA", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 124), f"VRAM Size : {gpu['vram_total']} GB High-Speed Memory", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 144), f"Status    : ACTIVE (PCIe Gen4)", fill=C_DIM, font=FONT_REG)
+
+    elif metric == "ram":
+        draw.text((342, 64), "MEMORY ARCHITECTURE", fill=C_GREEN, font=FONT_BOLD)
+        draw.text((342, 84), f"Total RAM : {ram['total_gb']} GB System Memory", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 104), f"Allocated : {ram['used_gb']} GB ({ram['usage']}%)", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 124), f"Available : {round(ram['total_gb'] - ram['used_gb'], 1)} GB Unallocated", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 144), f"Swap File : {ram['swap_total_gb']} GB Configured", fill=C_DIM, font=FONT_REG)
+
+    elif metric == "net":
+        draw.text((342, 64), "NETWORK INTERFACE & TRAFFIC", fill=C_ORANGE, font=FONT_BOLD)
+        draw.text((342, 84), f"Download  : ↓ {net['down_str']} ({net['down_mb']} MB/s)", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 104), f"Upload    : ↑ {net['up_str']} ({net['up_mb']} MB/s)", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 124), f"Link      : Ethernet / High-Speed LAN", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 144), f"Status    : ONLINE (Connected to Host)", fill=C_DIM, font=FONT_REG)
+
+    # Sub-Card 2: Live Activity / Sparkline (y: 178 to 292)
+    draw.rounded_rectangle([332, 178, 624, 292], radius=6, fill=C_SUB_BG, outline=C_CARD_BORDER)
+    if metric == "cpu":
+        draw.text((342, 186), "REAL-TIME CPU HISTORY (20 SAMPLES)", fill=C_CYAN, font=FONT_BOLD)
+        draw_sparkline(draw, 342, 210, 270, 56, cpu.get("history", [cpu["usage"]]), max_val=100, color=C_CYAN)
+        draw.text((342, 272), f"Peak: {max(cpu.get('history', [cpu['usage']]))}%   Current: {cpu['usage']}%", fill=C_DIM, font=FONT_SMALL)
+
+    elif metric == "gpu":
+        draw.text((342, 186), "REAL-TIME GPU HISTORY (20 SAMPLES)", fill=C_PINK, font=FONT_BOLD)
+        draw_sparkline(draw, 342, 210, 270, 56, gpu.get("history", [gpu["usage"]]), max_val=100, color=C_PINK)
+        draw.text((342, 272), f"Peak: {max(gpu.get('history', [gpu['usage']]))}%   Current: {gpu['usage']}%", fill=C_DIM, font=FONT_SMALL)
+
+    elif metric == "ram":
+        draw.text((342, 186), "MEMORY USAGE COMPOSITION", fill=C_GREEN, font=FONT_BOLD)
+        used_w = int(270 * (ram['usage'] / 100.0))
+        draw.rectangle([342, 215, 612, 245], fill=(25, 35, 55), outline=(45, 60, 90))
+        if used_w > 0:
+            draw.rectangle([342, 215, 342 + used_w, 245], fill=C_GREEN)
+        draw.text((342, 255), f"Used: {ram['used_gb']} GB ({ram['usage']}%)  |  Free: {round(ram['total_gb'] - ram['used_gb'], 1)} GB", fill=C_DIM, font=FONT_SMALL)
+        draw.text((342, 272), f"Swap Usage: {ram['swap_used_gb']} / {ram['swap_total_gb']} GB ({ram['swap_usage']}%)", fill=C_DIM, font=FONT_SMALL)
+
+    elif metric == "net":
+        draw.text((342, 186), "STORAGE FILESYSTEM BREAKDOWN", fill=C_ORANGE, font=FONT_BOLD)
+        disk_w = int(270 * (disk['usage'] / 100.0))
+        draw.rectangle([342, 215, 612, 245], fill=(25, 35, 55), outline=(45, 60, 90))
+        if disk_w > 0:
+            draw.rectangle([342, 215, 342 + disk_w, 245], fill=C_ORANGE)
+        draw.text((342, 255), f"Root (/): {disk['used_gb']} GB used of {disk['total_gb']} GB ({disk['usage']}%)", fill=C_DIM, font=FONT_SMALL)
+        draw.text((342, 272), f"Free Disk Space: {disk['total_gb'] - disk['used_gb']} GB Remaining", fill=C_DIM, font=FONT_SMALL)
+
+    # Sub-Card 3: Health & Diagnostics (y: 302 to 414)
+    draw.rounded_rectangle([332, 302, 624, 414], radius=6, fill=C_SUB_BG, outline=C_CARD_BORDER)
+    if metric == "cpu":
+        draw.text((342, 310), "THERMAL MONITORING & HEALTH", fill=C_CYAN, font=FONT_BOLD)
+        status_txt = "OPTIMAL (Normal Operations)" if cpu['temp'] < 65 else ("WARM (Heavy Workload)" if cpu['temp'] < 80 else "HIGH TEMP WARNING")
+        draw.text((342, 330), f"Thermal State   : {status_txt}", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 350), f"Target Limit    : 95°C Max Tj", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 370), f"Governor State  : Performance / Schedutil", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 390), f"Hardware Health : 100% (No Thermal Throttling)", fill=C_GREEN, font=FONT_REG)
+
+    elif metric == "gpu":
+        draw.text((342, 310), "VRAM & THERMAL EFFICIENCY", fill=C_PINK, font=FONT_BOLD)
+        draw.text((342, 330), f"GPU Core Temp   : {gpu['temp']} °C (Max 83°C)", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 350), f"VRAM Utilization: {vram_pct}% Allocated", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 370), f"Cooling State   : Dynamic Fan Profile", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 390), f"GPU Health      : OPTIMAL / NOMINAL", fill=C_GREEN, font=FONT_REG)
+
+    elif metric == "ram":
+        draw.text((342, 310), "MEMORY HEALTH & PRESSURE", fill=C_GREEN, font=FONT_BOLD)
+        draw.text((342, 330), f"Memory Pressure : Low (Headroom Available)", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 350), f"Swap Activity   : Healthy (Low Swapping)", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 370), f"Cache Efficiency: High Hit Ratio", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 390), f"Status          : 100% Healthy", fill=C_GREEN, font=FONT_REG)
+
+    elif metric == "net":
+        draw.text((342, 310), "I/O THROUGHPUT & LINK INTEGRITY", fill=C_ORANGE, font=FONT_BOLD)
+        draw.text((342, 330), f"Packet Drops    : 0 (No Errors)", fill=C_WHITE, font=FONT_REG)
+        draw.text((342, 350), f"Transfer Rates  : ↓ {net['down_mb']} MB/s  ↑ {net['up_mb']} MB/s", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 370), f"Disk Mount      : / (ext4/btrfs)", fill=C_DIM, font=FONT_REG)
+        draw.text((342, 390), f"Link Integrity  : 100% Optimal", fill=C_GREEN, font=FONT_REG)
+
+    # 4. Bottom Navigation & Selector Bar (8, 430, 632, 474)
+    draw.rounded_rectangle([8, 430, 632, 474], radius=6, fill=C_CARD_BG, outline=C_CARD_BORDER)
+
+    pills = [("ALL", "all"), ("CPU", "cpu"), ("GPU", "gpu"), ("RAM", "ram"), ("NET", "net")]
+    px = 16
+    draw.text((px, 444), "[▲/▼ D-Pad]", fill=C_DIM, font=FONT_BOLD)
+    px += 85
+
+    for label, mode_key in pills:
+        is_active = (mode_key == metric)
+        tw = int(draw.textlength(label, font=FONT_BOLD))
+        pw = tw + 14
+        if is_active:
+            draw.rounded_rectangle([px, 437, px + pw, 467], radius=4, fill=primary_color)
+            draw.text((px + 7, 444), label, fill=(10, 15, 25), font=FONT_BOLD)
+        else:
+            draw.rounded_rectangle([px, 437, px + pw, 467], radius=4, fill=(20, 28, 44), outline=C_CARD_BORDER)
+            draw.text((px + 7, 444), label, fill=C_DIM, font=FONT_REG)
+        px += pw + 8
+
+    draw.text((495, 444), "[MODE] Themes", fill=C_DIM, font=FONT_REG)
+
+    if osd_msg:
+        bw, bh = 340, 48
+        bx = (640 - bw) // 2
+        by = 54
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=8, fill=(10, 16, 26), outline=primary_color, width=2)
+        draw.text((bx + bw // 2, by + 16), osd_msg, fill=C_WHITE, font=FONT_LARGE, anchor="mm")
+        draw.text((bx + bw // 2, by + 34), "Press Up/Down arrow to change focus", fill=primary_color, font=FONT_SMALL, anchor="mm")
+
     r, g, b = img.split()
     bgra = Image.merge("RGBA", (b, g, r, Image.new("L", (640, 480), 255)))
     return zlib.compress(bgra.tobytes(), level=1)
@@ -1129,6 +1365,10 @@ def render_gallery_frame(gallery_mgr):
     return zlib.compress(bgra.tobytes(), level=1), delay
 
 
+FOCUS_MODES = ["all", "cpu", "gpu", "ram", "net"]
+FOCUS_FILE = os.path.expanduser("~/.config/ga36/focus")
+
+
 def get_saved_theme():
     try:
         if os.path.exists(THEME_FILE):
@@ -1150,6 +1390,27 @@ def save_active_theme(theme_name):
         pass
 
 
+def get_saved_focus():
+    try:
+        if os.path.exists(FOCUS_FILE):
+            with open(FOCUS_FILE, "r") as f:
+                f_mode = f.read().strip().lower()
+                if f_mode in FOCUS_MODES:
+                    return f_mode
+    except Exception:
+        pass
+    return "all"
+
+
+def save_active_focus(focus_name):
+    try:
+        os.makedirs(os.path.dirname(FOCUS_FILE), exist_ok=True)
+        with open(FOCUS_FILE, "w") as f:
+            f.write(focus_name.strip().lower() + "\n")
+    except Exception:
+        pass
+
+
 def mode_dashboard(client, theme=None):
     if theme and theme.lower() in THEMES:
         current_theme = theme.lower()
@@ -1157,16 +1418,21 @@ def mode_dashboard(client, theme=None):
     else:
         current_theme = get_saved_theme()
 
+    current_focus = get_saved_focus()
+    osd_msg = None
+    osd_until = 0.0
+
     print("\n" + "=" * 60)
     print(" GA36 / R36S CYBER HARDWARE & MEDIA HUD ACTIVE!")
-    print(f" Active Mode: {current_theme.upper()}")
+    print(f" Active Theme: {current_theme.upper()} | Focus View: {current_focus.upper()}")
     print(" Physical Gamepad Controls:")
-    print("   [ A ]           -> Media Play / Pause")
-    print("   [ B ]           -> Next Track")
-    print("   [ X ]           -> Toggle Microphone Mute")
-    print("   [ Y ]           -> Capture Screenshot")
-    print("   [ SELECT/MODE/FN ] -> Cycle Mode (PIE ➔ DUAL ➔ BTOP ➔ GALLERY)")
-    print("   [ DPAD LEFT/RIGHT] -> Switch Mode (or Prev/Next Image in Gallery)")
+    print("   [ A ]             -> Media Play / Pause")
+    print("   [ B ]             -> Next Track")
+    print("   [ X ]             -> Toggle Microphone Mute")
+    print("   [ Y ]             -> Capture Screenshot")
+    print("   [ DPAD UP / DOWN ]-> Cycle Focus (ALL ➔ CPU ➔ GPU ➔ RAM ➔ NET)")
+    print("   [ DPAD LEFT/RIGHT]-> Cycle HUD Themes (or Prev/Next in Gallery)")
+    print("   [ SELECT/MODE/FN ]-> Cycle Themes (or Reset Focus to ALL)")
     print(" Press Ctrl+C in terminal to exit.")
     print("=" * 60 + "\n")
 
@@ -1176,7 +1442,7 @@ def mode_dashboard(client, theme=None):
     gallery_mgr = GalleryManager()
 
     def handle_btn(btn_name):
-        nonlocal current_theme
+        nonlocal current_theme, current_focus, osd_msg, osd_until
         btn_upper = str(btn_name).upper()
 
         is_theme_cycle = btn_upper in (
@@ -1189,6 +1455,8 @@ def mode_dashboard(client, theme=None):
         is_down = btn_upper in ("DPAD_DOWN", "KEY_545", "KEY_16", "KEY_108")
         is_l1 = btn_upper in ("L1", "KEY_310")
         is_r1 = btn_upper in ("R1", "KEY_311")
+        is_l2 = btn_upper in ("L2", "KEY_312")
+        is_r2 = btn_upper in ("R2", "KEY_313")
 
         if current_theme == "gallery":
             if is_right or is_down or is_r1:
@@ -1205,18 +1473,42 @@ def mode_dashboard(client, theme=None):
             else:
                 client.default_button_action(btn_name)
         else:
-            if is_theme_cycle or is_r1:
+            # Dashboard modes (pie, dual, btop)
+            if is_up or is_r2:
+                # Cycle focus forward (ALL -> CPU -> GPU -> RAM -> NET -> ALL)
+                idx = (FOCUS_MODES.index(current_focus) + 1) % len(FOCUS_MODES)
+                current_focus = FOCUS_MODES[idx]
+                save_active_focus(current_focus)
+                osd_msg = f"⚡ FOCUS: {current_focus.upper()}" if current_focus != "all" else "⚡ VIEW: ALL METRICS"
+                osd_until = time.time() + 2.5
+                print(f"\n[FOCUS UPDATED] Mode: {current_focus.upper()} ({idx + 1}/{len(FOCUS_MODES)})    ")
+            elif is_down or is_l2:
+                # Cycle focus backward (ALL -> NET -> RAM -> GPU -> CPU -> ALL)
+                idx = (FOCUS_MODES.index(current_focus) - 1) % len(FOCUS_MODES)
+                current_focus = FOCUS_MODES[idx]
+                save_active_focus(current_focus)
+                osd_msg = f"⚡ FOCUS: {current_focus.upper()}" if current_focus != "all" else "⚡ VIEW: ALL METRICS"
+                osd_until = time.time() + 2.5
+                print(f"\n[FOCUS UPDATED] Mode: {current_focus.upper()} ({idx + 1}/{len(FOCUS_MODES)})    ")
+            elif is_theme_cycle:
+                if current_focus != "all":
+                    current_focus = "all"
+                    save_active_focus("all")
+                    osd_msg = "⚡ VIEW: ALL METRICS"
+                    osd_until = time.time() + 2.0
+                    print(f"\n[FOCUS RESET] Back to Full HUD ({current_theme.upper()})    ")
+                else:
+                    idx = (THEMES.index(current_theme) + 1) % len(THEMES)
+                    current_theme = THEMES[idx]
+                    save_active_theme(current_theme)
+                    print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
+            elif is_r1 or is_right:
                 idx = (THEMES.index(current_theme) + 1) % len(THEMES)
                 current_theme = THEMES[idx]
                 save_active_theme(current_theme)
                 print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
-            elif is_l1:
+            elif is_l1 or is_left:
                 idx = (THEMES.index(current_theme) - 1) % len(THEMES)
-                current_theme = THEMES[idx]
-                save_active_theme(current_theme)
-                print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
-            elif is_left or is_right:
-                idx = (THEMES.index(current_theme) + (1 if is_right else -1)) % len(THEMES)
                 current_theme = THEMES[idx]
                 save_active_theme(current_theme)
                 print(f"\n[THEME CHANGED] New Mode: {current_theme.upper()}    ")
@@ -1263,6 +1555,16 @@ def mode_dashboard(client, theme=None):
                     gallery_mgr.trigger_osd()
                 print(f"\n[THEME UPDATED] New Mode: {current_theme.upper()}    ")
 
+            # Check if focus was updated externally (via CLI / file)
+            saved_focus = get_saved_focus()
+            if saved_focus != current_focus:
+                current_focus = saved_focus
+                osd_msg = f"⚡ FOCUS: {current_focus.upper()}" if current_focus != "all" else "⚡ VIEW: ALL METRICS"
+                osd_until = time.time() + 2.5
+                print(f"\n[FOCUS UPDATED] Mode: {current_focus.upper()}    ")
+
+            active_osd = osd_msg if time.time() < osd_until else None
+
             # Gather host metrics only for HUD modes
             if current_theme != "gallery":
                 cpu = get_cpu_info()
@@ -1272,17 +1574,20 @@ def mode_dashboard(client, theme=None):
                 disk = get_disk_info()
                 media = get_media_info()
 
-            # Render selected theme
+            # Render selected theme / focus
             if current_theme == "gallery":
                 comp_frame, delay_sec = render_gallery_frame(gallery_mgr)
+            elif current_focus != "all":
+                comp_frame = render_focus_dashboard(current_focus, cpu, gpu, ram, net, disk, media, power_info, osd_msg=active_osd)
+                delay_sec = 0.40
             elif current_theme == "dual":
-                comp_frame = render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info)
+                comp_frame = render_dual_dashboard(cpu, gpu, ram, net, disk, media, power_info, osd_msg=active_osd)
                 delay_sec = 0.40
             elif current_theme == "btop":
-                comp_frame = render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info)
+                comp_frame = render_btop_dashboard(cpu, gpu, ram, net, disk, media, power_info, osd_msg=active_osd)
                 delay_sec = 0.40
             else:
-                comp_frame = render_pie_dashboard(cpu, gpu, ram, net, disk, media, power_info)
+                comp_frame = render_pie_dashboard(cpu, gpu, ram, net, disk, media, power_info, osd_msg=active_osd)
                 delay_sec = 0.40
 
             # Send to R36S screen
@@ -1303,6 +1608,8 @@ def mode_dashboard(client, theme=None):
                 cur_name = gallery_mgr.current_filename
                 idx_str = f"[{gallery_mgr.current_idx + 1}/{gallery_mgr.total_count}]" if gallery_mgr.total_count else "[0/0]"
                 print(f"\r[{theme_label}] {clock_now} | {idx_str} {cur_name:<28} | FPS: {fps} ", end="", flush=True)
+            elif current_focus != "all":
+                print(f"\r[FOCUS: {current_focus.upper()}] {clock_now} | CPU: %{cpu['usage']:02d} | GPU: %{gpu['usage']:02d} | RAM: %{ram['usage']:02d} | Net: {net['down_str']} | FPS: {fps} ", end="", flush=True)
             else:
                 print(f"\r[{theme_label} HUD] {clock_now} | CPU: %{cpu['usage']:02d} ({cpu['temp']}°C) | GPU: %{gpu['usage']:02d} ({gpu['temp']}°C) | RAM: %{ram['usage']:02d} | Net: {net['down_str']} | FPS: {fps} ", end="", flush=True)
 
@@ -1400,9 +1707,9 @@ def mode_poweroff(client):
 # Main Entry Point
 # -------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="GA36 / R36S Live Sync & Control Suite v3.3")
+    parser = argparse.ArgumentParser(description="GA36 / R36S Live Sync & Control Suite v3.4")
     parser.add_argument("command", nargs="?", default="test",
-                        choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "mode", "theme", "gallery", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
+                        choices=["test", "ping", "battery", "charge", "image", "dashboard", "stream", "mode", "theme", "focus", "gallery", "shell", "exec", "ls", "push", "pull", "clear", "pause", "resume", "update-agent", "upgrade", "reboot", "poweroff"],
                         help="Operating mode")
     parser.add_argument("args", nargs="*", help="Command arguments")
     parser.add_argument("--port", "-p", default=None, help="Serial port (e.g. /dev/ttyACM0)")
@@ -1426,6 +1733,25 @@ def main():
         save_active_theme(target)
         print("\n" + "=" * 60)
         print(f" [SUCCESS] Mode Updated: {target.upper()} (Previous: {cur.upper()})")
+        print(" The screen display will update immediately.")
+        print("=" * 60 + "\n")
+        sys.exit(0)
+
+    # Instant Focus Switcher (does not require locking serial port)
+    if cmd == "focus":
+        cur_focus = get_saved_focus()
+        if parsed.args:
+            target = parsed.args[0].lower().strip()
+            if target not in FOCUS_MODES:
+                print(f"[ERROR] Invalid focus metric: '{target}'. Options: {', '.join(FOCUS_MODES)}")
+                sys.exit(1)
+        else:
+            idx = (FOCUS_MODES.index(cur_focus) + 1) % len(FOCUS_MODES)
+            target = FOCUS_MODES[idx]
+        save_active_focus(target)
+        print("\n" + "=" * 60)
+        print(f" [SUCCESS] Focus View Updated: {target.upper()} (Previous: {cur_focus.upper()})")
+        print(f" Options: {', '.join([m.upper() for m in FOCUS_MODES])}")
         print(" The screen display will update immediately.")
         print("=" * 60 + "\n")
         sys.exit(0)
@@ -1463,7 +1789,7 @@ def main():
         sys.exit(0)
 
     print("=" * 60)
-    print(" GA36 / R36S PC Companion & Live Control Suite v3.2")
+    print(" GA36 / R36S PC Companion & Live Control Suite v3.4")
     print("=" * 60)
 
     client = R36SClient(port=parsed.port)

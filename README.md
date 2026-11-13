@@ -21,6 +21,7 @@
 ## ✨ Features
 
 - **Giant 4-Dial Ring HUD (640x480 Fullscreen):** High-contrast circular meters for CPU, GPU, RAM, and Network (Download/Upload) with large, crisp readouts visible across the desk.
+- **Dedicated Single-Metric Focus Modes (CPU / GPU / RAM / NET):** Press the D-Pad **UP / DOWN** arrows to zoom in and focus on a single hardware subsystem with massive 110px centerpiece ring gauges, detailed architecture specs, real-time 20-sample history sparklines, and thermal headroom telemetry!
 - **Animated GIF & Image Gallery Mode:** Stream smooth animated GIFs and static wallpapers directly to your console screen with real-time frame looping and aspect ratio preservation. Save your favorites to `~/Pictures/GA36_Gallery` and browse using the console D-Pad!
 - **Zero-Flicker & Direct Framebuffer Boot:** EmulationStation is masked out and the Linux hardware framebuffer (`/dev/fb0`) is allocated directly to the PC companion stream. No UI stutter, no screen flashing, and no audio crackle.
 - **Silent & Clean (Zero Audio Overhead):** Pulseaudio and all background sound daemons are completely disabled and masked; audio files have been stripped for maximum power efficiency and zero speaker hiss.
@@ -29,9 +30,9 @@
   - `[ B ]`: Next Track
   - `[ X ]`: Toggle PC Microphone Mute (via WirePlumber / wpctl)
   - `[ Y ]`: Capture PC Screenshot (Spectacle / custom tool)
-  - `[ SELECT / MODE / START / FN ]`: Cycle HUD Themes (`PIE` ➔ `DUAL` ➔ `BTOP` ➔ `GALLERY`)
-  - `[ DPAD LEFT / UP ]`: Previous image or animated GIF in Gallery mode
-  - `[ DPAD RIGHT / DOWN ]`: Next image or animated GIF in Gallery mode
+  - `[ DPAD UP / DOWN ]`: Cycle Focus Views (`ALL` ➔ `CPU` ➔ `GPU` ➔ `RAM` ➔ `NET`) in Dashboard mode (or Prev/Next in Gallery)
+  - `[ DPAD LEFT / RIGHT ]`: Cycle HUD Themes (`PIE` ➔ `DUAL` ➔ `BTOP` ➔ `GALLERY`)
+  - `[ SELECT / MODE / START / FN ]`: Cycle HUD Themes (or reset focus back to `ALL`)
   - `[ L1 / R1 ]`: Quick HUD theme toggle
 - **Smart Power & Eco Mode (~2.5 FPS):** Console CPU runs below 1.5% load, remains completely cool, and automatically charges from the host computer's USB-C port.
 - **Host PC Power Synchronization:** When your computer boots, the console wakes and shows the dashboard. When the computer shuts down, the console automatically powers off cleanly.
@@ -58,6 +59,7 @@ The `install.sh` script manages both setup and all operational commands:
 | `./install.sh` | Installs dependencies, sets up udev rules, and starts the service |
 | `./install.sh status` | Checks service status and USB connectivity |
 | `./install.sh mode [pie\|dual\|btop\|gallery]` | Switches HUD mode/theme on-the-fly (live update without restart) |
+| `./install.sh focus [all\|cpu\|gpu\|ram\|net]` | Zooms into single-metric focus view on-the-fly |
 | `./install.sh gallery` | Opens or displays information about `~/Pictures/GA36_Gallery` |
 | `./install.sh dashboard` | Opens an interactive terminal monitor and live HUD switcher |
 | `./install.sh stop` | Pauses the display stream |

@@ -229,6 +229,10 @@ cmd_mode() {
     python3 "$PYTHON_SCRIPT" mode "$@"
 }
 
+cmd_focus() {
+    python3 "$PYTHON_SCRIPT" focus "$@"
+}
+
 cmd_gallery() {
     python3 "$PYTHON_SCRIPT" gallery "$@"
 }
@@ -299,6 +303,9 @@ case "$ACTION" in
     mode|theme)
         cmd_mode "$@"
         ;;
+    focus)
+        cmd_focus "$@"
+        ;;
     gallery|gif|art)
         cmd_gallery "$@"
         ;;
@@ -321,6 +328,7 @@ case "$ACTION" in
         echo "  logs           -> Follow live system logs"
         echo "  dashboard      -> Open interactive terminal dashboard & controls"
         echo "  mode [theme]   -> Switch HUD mode (pie, dual, btop, gallery or next)"
+        echo "  focus [target] -> Focus single metric view (all, cpu, gpu, ram, net or cycle)"
         echo "  gallery        -> Manage & list media files in ~/Pictures/GA36_Gallery"
         echo "  image <file>   -> Push custom image / wallpaper to console screen"
         echo "  battery        -> Display battery and power status"
