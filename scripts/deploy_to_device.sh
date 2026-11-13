@@ -40,13 +40,40 @@ agent_local = '${REPO_DIR}/device/ga36_agent.py'
 gadget_local = '${REPO_DIR}/device/usb_gadget_setup.sh'
 hook_local = '${REPO_DIR}/device/90-pc_link.conf'
 restore_local = '${REPO_DIR}/device/RESTORE_ALL.sh'
+splash_png = '${REPO_DIR}/device/splash/splash.png'
+splash_raw = '${REPO_DIR}/device/splash/splash.raw'
+bootlogo_bmp = '${REPO_DIR}/device/splash/bootlogo.bmp'
 
-client.exec_cmd('mkdir -p /storage/pc_link /storage/.config/profile.d /storage/.config/system.d /storage/roms/backup')
+client.exec_cmd('mkdir -p /storage/pc_link /storage/.config/profile.d /storage/.config/system.d /storage/.config/splash /storage/roms/backup')
 
 client.push_file(agent_local, '/storage/pc_link/r36s_agent.py')
 client.push_file(gadget_local, '/storage/pc_link/usb_gadget_setup.sh')
 client.push_file(hook_local, '/storage/.config/profile.d/90-pc_link.conf')
 client.push_file(restore_local, '/storage/roms/backup/RESTORE_ALL.sh')
+
+# Push splashes & custom boot branding
+print('[*] Installing custom cyber boot splash and loading screens...')
+if os.path.exists(splash_png):
+    client.push_file(splash_png, '/storage/pc_link/splash.png')
+    client.push_file(splash_png, '/storage/.config/splash/splash.png')
+    client.push_file(splash_png, '/storage/.config/splash/loading-game.png')
+    client.push_file(splash_png, '/storage/.config/splash/loading-game-std.png')
+    client.push_file(splash_png, '/storage/.config/splash/splash-std.png')
+    client.push_file(splash_png, '/storage/.config/splash/splash-1080.png')
+    client.push_file(splash_png, '/storage/.config/splash/retroarch.png')
+if os.path.exists(splash_raw):
+    client.push_file(splash_raw, '/storage/pc_link/splash.raw')
+    client.push_file(splash_raw, '/storage/.config/splash/splash.raw')
+    client.push_file(splash_raw, '/storage/.config/splash/splash-1080.raw')
+
+# Remove any old video splashes (like es_start.mp4)
+client.exec_cmd('rm -f /storage/.config/splash/*.mp4 /storage/roms/splash/*.mp4 2>/dev/null')
+
+# Mount boot partition and update bootlogo.bmp if available
+if os.path.exists(bootlogo_bmp):
+    client.exec_cmd('mkdir -p /tmp/volumn && mount /dev/mmcblk0p2 /tmp/volumn 2>/dev/null || true')
+    client.push_file(bootlogo_bmp, '/tmp/volumn/bootlogo.bmp')
+    client.exec_cmd('umount /tmp/volumn 2>/dev/null || true')
 
 client.exec_cmd('chmod +x /storage/pc_link/*.py /storage/pc_link/*.sh /storage/roms/backup/*.sh')
 

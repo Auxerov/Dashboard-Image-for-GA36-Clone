@@ -31,7 +31,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSION = "3.3"
+VERSION = "3.5"
 SERIAL_DEV = "/dev/ttyGS0"
 
 
@@ -77,8 +77,39 @@ class MiniFB:
             self.size = self.stride * max(self.height, self.vyres)
             self.fb_mem = mmap.mmap(self.fb_file.fileno(), self.size, mmap.MAP_SHARED, mmap.PROT_WRITE | mmap.PROT_READ)
             self.pan_to_zero()
+            self.show_splash()
         except Exception as e:
             sys.stderr.write(f"FB Init error: {e}\n")
+
+    def show_splash(self):
+        """Displays custom cyber splash screen on framebuffer."""
+        candidates = [
+            "/storage/pc_link/splash.raw",
+            "/storage/.config/splash/splash.raw",
+            "/storage/.config/splash/splash-1080.raw",
+            "/storage/pc_link/splash.png",
+            "/storage/.config/splash/splash.png"
+        ]
+        for p in candidates:
+            if os.path.exists(p):
+                try:
+                    if p.endswith(".raw"):
+                        with open(p, "rb") as f:
+                            data = f.read()
+                            if self.write_raw_decompressed(data):
+                                return True
+                    elif p.endswith(".png"):
+                        from PIL import Image
+                        im = Image.open(p).convert("RGB")
+                        if im.size != (self.width, self.height):
+                            im = im.resize((self.width, self.height))
+                        r, g, b = im.split()
+                        bgra = Image.merge("RGBA", (b, g, r, Image.new("L", (self.width, self.height), 255)))
+                        if self.write_raw_decompressed(bgra.tobytes()):
+                            return True
+                except Exception:
+                    pass
+        return False
 
     def pan_to_zero(self):
         if self.fb_file and self.vinfo_raw and self.vyres > self.height:
@@ -152,6 +183,7 @@ class R36SAgent:
         try:
             subprocess.run("systemctl unmask emustation.service 2>/dev/null ; systemctl start emustation.service 2>/dev/null", shell=True)
             self.gui_paused = False
+            self.fb.show_splash()
             return True
         except Exception:
             return False
@@ -438,32 +470,9 @@ class R36SAgent:
             subprocess.run("systemctl poweroff || poweroff", shell=True)
 
     def run_power_sync_watchdog(self):
-        """Watches USB power & host connection: if PC turns off, console turns off cleanly."""
-        offline_start = None
+        """Monitors system health and power state without unintended reboots or shutdowns."""
         while self.running:
-            time.sleep(2.0)
-            if not self.gui_paused:
-                # Standalone gaming mode in EmulationStation, do not auto-poweroff
-                offline_start = None
-                continue
-
-            # In PC Companion HUD mode:
-            power = self.get_power_info()
-            usb_online = power.get("online", False)
-            host_connected = (self.ser_file is not None and not getattr(self.ser_file, "closed", True))
-
-            if not usb_online and not host_connected:
-                if offline_start is None:
-                    offline_start = time.time()
-                elif time.time() - offline_start > 15.0:
-                    # PC USB power has been offline for > 15 seconds while in HUD mode
-                    try:
-                        subprocess.run("systemctl poweroff || poweroff", shell=True)
-                    except Exception:
-                        pass
-                    break
-            else:
-                offline_start = None
+            time.sleep(10.0)
 
     def run_serial_loop(self):
         """Persistent serial loop: keeps port open and dispatches requests to thread pool."""

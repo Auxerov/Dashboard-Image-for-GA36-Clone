@@ -24,7 +24,7 @@ NC='\033[0m'
 print_banner() {
     echo -e "${CYAN}${BOLD}"
     echo "============================================================"
-    echo "  ⚡ GA36 Clone PC Cyber Dashboard - Master Suite v3.2"
+    echo "  ⚡ GA36 Clone PC Cyber Dashboard - Master Suite v3.5"
     echo "============================================================"
     echo -e "${NC}"
 }
@@ -202,6 +202,7 @@ cmd_logs() {
 
 cmd_dashboard() {
     systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+    trap 'systemctl --user start "$SERVICE_NAME" 2>/dev/null || true' EXIT
     python3 "$PYTHON_SCRIPT" dashboard
 }
 

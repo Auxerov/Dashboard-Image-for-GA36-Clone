@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-R36S PC Companion & Live Control Suite v3.0
+R36S / GA36 PC Companion & Live Control Suite v3.5
 Communicates with R36S over USB CDC-ACM Serial (/dev/ttyACM*) and TCP (8888).
 
 Features:
@@ -281,28 +281,60 @@ class R36SClient:
         except Exception:
             return False
 
+    def close_serial(self):
+        with self.lock:
+            if self.ser:
+                try:
+                    self.ser.close()
+                except Exception:
+                    pass
+                self.ser = None
+            for rid, (ev, res) in list(self.pending_responses.items()):
+                res["status"] = "error"
+                res["msg"] = "Serial connection closed"
+                ev.set()
+            self.pending_responses.clear()
+
+    def try_usb_reset(self):
+        if not shutil.which("usbreset"):
+            return
+        target_ids = ["18d1:0001", "1d6b:0104", "0525:a4a7", "1f3a:efe8"]
+        try:
+            out = subprocess.check_output(["lsusb"], stderr=subprocess.DEVNULL).decode("utf-8")
+            for line in out.splitlines():
+                for tid in target_ids:
+                    if tid.lower() in line.lower() or "gadget" in line.lower() or "android" in line.lower():
+                        parts = line.split()
+                        if len(parts) >= 6 and parts[5].count(":") == 1:
+                            subprocess.run(["sudo", "-n", "usbreset", parts[5]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            time.sleep(0.5)
+                            return
+        except Exception:
+            pass
+
     def reconnect(self, timeout=None):
-        if self.ser:
-            try:
-                self.ser.close()
-            except Exception:
-                pass
-        self.ser = None
-        self.pending_responses.clear()
-        if shutil.which("usbreset"):
-            subprocess.run(["sudo", "-n", "usbreset", "18d1:0001"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(0.8)
+        self.close_serial()
+        self.try_usb_reset()
         return self.connect(timeout=timeout)
 
     def connect(self, timeout=30):
         start = time.time()
-        retried_reset = False
+        spin_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        spin_idx = 0
+        last_reset_time = 0.0
+
         while self.running and (timeout is None or (time.time() - start < timeout)):
+            elapsed = int(time.time() - start)
+            spin = spin_chars[spin_idx % len(spin_chars)]
+            spin_idx += 1
+
             # 1. Try Serial
             p = self.find_port()
             if p:
+                sys.stdout.write(f"\r\033[K  \033[1;36m[{spin}] Fetching devices...\033[0m Handshaking on {p}... ")
+                sys.stdout.flush()
                 try:
-                    s = serial.Serial(p, 115200, timeout=0.5, write_timeout=1.5)
+                    s = serial.Serial(p, 115200, timeout=0.6, write_timeout=1.5)
                     s.dtr = True
                     s.rts = True
                     s.reset_input_buffer()
@@ -312,31 +344,39 @@ class R36SClient:
                     self.port = p
                     self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
                     self.reader_thread.start()
-                    # Quick check if device responds
+
+                    # Quick handshake ping
                     res = self.ping()
                     if res.get("status") == "ok":
-                        print(f"\n[CONNECTED] GA36 Serial Port: {self.port}")
+                        sys.stdout.write(f"\r\033[K  \033[1;32m[✔] GA36 Console detected & linked on {self.port}!\033[0m\n")
+                        sys.stdout.flush()
                         return True
                     else:
-                        if not retried_reset and shutil.which("usbreset"):
-                            retried_reset = True
-                            subprocess.run(["sudo", "-n", "usbreset", "18d1:0001"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            time.sleep(1.0)
-                            continue
+                        self.close_serial()
+                        if time.time() - last_reset_time > 5.0:
+                            last_reset_time = time.time()
+                            self.try_usb_reset()
                 except Exception:
-                    pass
+                    self.close_serial()
 
             # 2. Try TCP
             if self.try_tcp_connect():
+                sys.stdout.write(f"\r\033[K  \033[1;32m[✔] GA36 Console connected over TCP Network!\033[0m\n")
+                sys.stdout.flush()
                 return True
 
             if timeout is not None:
                 rem = max(0, int(timeout - (time.time() - start)))
-                print(f"\rSearching for GA36 device (/dev/ttyACM*)... ({rem:02d}s remaining) ", end="", flush=True)
+                status_str = f"Scanning USB ports (/dev/ttyACM*, /dev/ttyUSB*) [{rem:02d}s remaining]"
             else:
-                print("\rWaiting for GA36 connection (/dev/ttyACM*)... ", end="", flush=True)
-            time.sleep(0.5)
-        print()
+                elapsed_str = f"{elapsed // 60:02d}:{elapsed % 60:02d}"
+                status_str = f"Scanning USB ports (/dev/ttyACM*, /dev/ttyUSB*) [{elapsed_str}]"
+
+            sys.stdout.write(f"\r\033[K  \033[1;36m[{spin}] Fetching devices...\033[0m {status_str} ")
+            sys.stdout.flush()
+            time.sleep(0.12)
+
+        sys.stdout.write("\n")
         return False
 
     def _reader_loop(self):
@@ -359,6 +399,13 @@ class R36SClient:
                     pass
             except Exception:
                 break
+        # Auto-cleanup descriptor when reader loop terminates
+        if self.ser:
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+            self.ser = None
 
     def _tcp_reader_loop(self):
         buf = b""
@@ -532,16 +579,13 @@ class R36SClient:
 
     def close(self):
         self.running = False
-        if self.ser:
-            try:
-                self.ser.close()
-            except Exception:
-                pass
+        self.close_serial()
         if self.sock:
             try:
                 self.sock.close()
             except Exception:
                 pass
+            self.sock = None
 
 
 # -------------------------------------------------------------
@@ -1593,8 +1637,16 @@ def mode_dashboard(client, theme=None):
             # Send to R36S screen
             res = client.display_frame_raw(comp_frame)
             if res.get("status") != "ok":
-                print(f"\r[RECONNECTING] Port unresponsive ({res.get('msg')}), reconnecting... ", end="", flush=True)
-                client.reconnect(timeout=2)
+                sys.stdout.write(f"\n\033[1;33m[DISCONNECTED]\033[0m Console connection lost ({res.get('msg', 'unresponsive')}). Waiting for device...\n")
+                sys.stdout.flush()
+                client.close_serial()
+                connected = client.connect(timeout=None)
+                if connected:
+                    client.pause_gui()
+                    power_info = client.get_power()
+                    last_power_time = time.time()
+                    sys.stdout.write("\n\033[1;32m[RESUMED]\033[0m Display streaming restored!\n\n")
+                    sys.stdout.flush()
                 time.sleep(0.3)
                 continue
 
@@ -1789,7 +1841,7 @@ def main():
         sys.exit(0)
 
     print("=" * 60)
-    print(" GA36 / R36S PC Companion & Live Control Suite v3.4")
+    print(" GA36 / R36S PC Companion & Live Control Suite v3.5")
     print("=" * 60)
 
     client = R36SClient(port=parsed.port)
