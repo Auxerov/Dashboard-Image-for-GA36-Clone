@@ -498,9 +498,11 @@ class R36SAgent:
                         try:
                             chunk = ser.read(4096)
                         except Exception:
+                            self.fb.show_splash()
                             break
                         if not chunk:
-                            # Host disconnected / port closed: break to reopen
+                            # Host disconnected / PC sleep or shutdown: revert to cyber splash
+                            self.fb.show_splash()
                             break
                         buf += chunk
                         while b"\n" in buf:
@@ -509,6 +511,7 @@ class R36SAgent:
                             if line_str:
                                 self.executor.submit(self.handle_request, line_str, self.send_serial_response)
             except Exception:
+                self.fb.show_splash()
                 time.sleep(0.5)
             finally:
                 self.ser_file = None
@@ -686,6 +689,22 @@ def main():
     args = parser.parse_args()
 
     agent = R36SAgent(serial_dev=args.dev, tcp_port=args.port)
+
+    # Clean termination signal handling on console shutdown or reboot
+    def handle_signal(signum, frame):
+        agent.running = False
+        try:
+            agent.fb.show_splash()
+            agent.fb.close()
+        except Exception:
+            pass
+        sys.exit(0)
+
+    try:
+        signal.signal(signal.SIGTERM, handle_signal)
+        signal.signal(signal.SIGINT, handle_signal)
+    except Exception:
+        pass
 
     # Start TCP Server thread
     t_tcp = threading.Thread(target=agent.run_tcp_server, args=(args.port,), daemon=True)

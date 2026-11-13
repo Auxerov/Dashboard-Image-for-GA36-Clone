@@ -346,7 +346,7 @@ class R36SClient:
                     self.reader_thread.start()
 
                     # Quick handshake ping
-                    res = self.ping()
+                    res = self.ping(timeout=2.0)
                     if res.get("status") == "ok":
                         sys.stdout.write(f"\r\033[K  \033[1;32m[✔] GA36 Console detected & linked on {self.port}!\033[0m\n")
                         sys.stdout.flush()
@@ -495,8 +495,8 @@ class R36SClient:
                 del self.pending_responses[cur_id]
             return {"status": "error", "msg": "Timeout waiting for R36S response"}
 
-    def ping(self):
-        res = self.call_rpc({"type": "ping"}, timeout=5)
+    def ping(self, timeout=3.0):
+        res = self.call_rpc({"type": "ping"}, timeout=timeout)
         if res.get("status") == "ok" and "power" in res:
             self.last_power = res.get("power", {})
         return res
