@@ -132,7 +132,12 @@ if [ "$FLASHED_BOOT" -eq 0 ]; then
     fi
 fi
 
-echo -e "${GREEN}[4/4] Flushing all filesystem buffers (sync)...${NC}"
+echo -e "${GREEN}[4/5] Purging all ROMs and media files from games partition...${NC}"
+if [ -f "${REPO_DIR}/scripts/clean_roms.sh" ]; then
+    bash "${REPO_DIR}/scripts/clean_roms.sh" || true
+fi
+
+echo -e "${GREEN}[5/5] Flushing all filesystem buffers (sync)...${NC}"
 sync
 
 echo ""
